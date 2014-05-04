@@ -22,7 +22,7 @@ import scala.collection.mutable.{ArrayBuffer, Map, Set}
 import scala.concurrent.Await
 
 import tbd.Constants._
-import tbd.ddg.{Node, Timestamp}
+import tbd.ddg.Node
 import tbd.master.Main
 import tbd.memo.{Lift, MemoEntry}
 import tbd.messages._
@@ -59,13 +59,8 @@ class TBD(
   // propagation, to determine when memo matches can be made.
   val updatedMods = Set[ModId]()
 
-  // The timestamp of the read currently being reexecuting during change
-  // propagation.
-  var reexecutionStart: Timestamp = null
-
-  // The timestamp of the node immediately after the end of the read being
-  // reexecuted.
-  var reexecutionEnd: Timestamp = null
+  // During change propagation, the read currently being reexecuted.
+  var reexecutingNode: Node = null
 
   def read[T, U](mod: Mod[T], reader: T => (Changeable[U])): Changeable[U] = {
     val readNode = worker.ddg.addRead(mod.asInstanceOf[Mod[Any]],
@@ -161,11 +156,9 @@ class TBD(
         if (worker.memoTable.contains(signature)) {
 
           // Search through the memo entries matching this signature to see if
-          // there's one in the right time range.
+          // there's one that's descended from the reexecuting read.
           for (memoEntry <- worker.memoTable(signature)) {
-            val timestamp = memoEntry.node.timestamp
-            if (!found && timestamp > reexecutionStart &&
-                timestamp < reexecutionEnd) {
+            if (!found && worker.ddg.descendedFrom(memoEntry.node, reexecutingNode)) {
               found = true
               worker.ddg.attachSubtree(currentParent, memoEntry.node)
               toRemove = memoEntry

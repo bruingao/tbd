@@ -17,7 +17,7 @@ package tbd.ddg
 
 import akka.actor.ActorRef
 import akka.event.LoggingAdapter
-import scala.collection.mutable.{ArrayBuffer, Map, PriorityQueue, Set}
+import scala.collection.mutable.{ArrayBuffer, Map, MutableList, PriorityQueue, Set}
 
 import tbd.Changeable
 import tbd.memo.MemoEntry
@@ -29,18 +29,13 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
   val reads = Map[ModId, Set[ReadNode]]()
   val pars = Map[ActorRef, ParNode]()
 
-  var updated = PriorityQueue[Node]()(new TimestampOrdering())
-
-  val ordering = new Ordering()
-
   var lastRemovedMemo: MemoNode = null
 
   def addRead(
       mod: Mod[Any],
       parent: Node,
       reader: Any => Changeable[Any]): Node = {
-    val timestamp = nextTimestamp(parent)
-    val readNode = new ReadNode(mod, parent, timestamp, reader)
+    val readNode = new ReadNode(mod, parent, reader)
     parent.addChild(readNode)
 
     if (reads.contains(mod.id)) {
@@ -53,8 +48,7 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
   }
 
   def addWrite(mod: Mod[Any], parent: Node): Node = {
-    val timestamp = nextTimestamp(parent)
-    val writeNode = new WriteNode(mod, parent, timestamp)
+    val writeNode = new WriteNode(mod, parent)
 
     parent.addChild(writeNode)
 
@@ -62,9 +56,7 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
   }
 
   def addPar(workerRef1: ActorRef, workerRef2: ActorRef, parent: Node) {
-    val timestamp = nextTimestamp(parent)
-
-    val parNode = new ParNode(workerRef1, workerRef2, parent, timestamp)
+    val parNode = new ParNode(workerRef1, workerRef2, parent)
     parent.addChild(parNode)
 
     pars(workerRef1) = parNode
@@ -72,55 +64,14 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
   }
 
   def addMemo(parent: Node, signature: List[Any]): Node = {
-    val timestamp = nextTimestamp(parent)
-    val memoNode = new MemoNode(parent, timestamp, signature)
+    val memoNode = new MemoNode(parent, signature)
     parent.addChild(memoNode)
     memoNode
-  }
-
-  private def nextTimestamp(parent: Node): Timestamp = {
-    if (parent.children.size == 0) {
-      ordering.after(parent.timestamp)
-    } else {
-      nextTimestamp(parent.children.last)
-    }
-  }
-
-  /**
-   * Returns the timestamp for the next node in the graph after the execution
-   * this node represents completes, which is the timestamp of the node's next
-   * older sibling, unless it has no older siblings then its the node's parent's
-   * next older sibling, recursively up the tree until an older sibling is found.
-   */
-  def getTimestampAfter(node: Node): Timestamp = {
-    var previousChild: Node = null
-    var ret: Timestamp = null
-
-    if (node.parent == null) {
-      Timestamp.MAX_TIMESTAMP
-    } else {
-      for (child <- node.parent.children) {
-	if (previousChild == node) {
-	  ret = child.timestamp
-	}
-
-	previousChild = child
-      }
-
-      if (ret == null) {
-	getTimestampAfter(node.parent)
-      } else {
-	ret
-      }
-    }
   }
 
   def modUpdated(modId: ModId) {
     assert(reads.contains(modId))
     for (readNode <- reads(modId)) {
-      if (!readNode.updated) {
-        updated += readNode
-      }
       readNode.updated = true
     }
   }
@@ -128,9 +79,7 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
   // Pebbles a par node. Returns true iff the pebble did not already exist.
   def parUpdated(workerRef: ActorRef): Boolean = {
     val parNode = pars(workerRef)
-    if (!parNode.pebble1 && !parNode.pebble2) {
-      updated += parNode
-    }
+    parNode.updated = true
 
     if (parNode.workerRef1 == workerRef) {
       val ret = !parNode.pebble1
@@ -144,28 +93,17 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
   }
 
   /**
-   * Called before a read is reexecuted, the descendents of this node are
-   * cleaned up, up to the first memo nodes, which are returned so that
-   * they can be reattached or cleaned up later.
+   * Called before a read is reexecuted, the children of this node are attached
+   * to a dummy node which is returned, so that they can either be memo matched
+   * or cleaned up later.
    */
-  def cleanupRead(subtree: Node): ArrayBuffer[Node] = {
-    val ret = ArrayBuffer[Node]()
-    if (subtree.children.size > 0) {
-      for (child <- subtree.children) {
-        if (child.isInstanceOf[MemoNode]) {
-          child.parent.removeChild(subtree)
-          child.parent = null
-          ret += child
-        } else {
-          ret ++= cleanupRead(child)
-          cleanup(child)
-        }
-      }
+  def cleanupRead(subtree: Node): Node = {
+    val dummy = new RootNode(null)
+    for (child <- subtree.children) {
+      child.parent = dummy
     }
-
     subtree.children.clear()
-
-    ret
+    dummy
   }
 
   def cleanupSubtree(subtree: Node) {
@@ -185,15 +123,12 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
 
       var toRemove: MemoEntry = null
       for (memoEntry <- worker.memoTable(signature)) {
-        if (toRemove == null && memoEntry.node.timestamp == node.timestamp) {
+        if (toRemove == null && memoEntry.node == node) {
           toRemove = memoEntry
         }
       }
       worker.memoTable(signature) -= toRemove
     }
-
-    updated = updated.filter((node2: Node) => node != node2)
-    ordering.remove(node.timestamp)
 
     node.children.clear()
   }
@@ -205,6 +140,40 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
 
     parent.addChild(subtree)
     subtree.parent = parent
+  }
+
+  def descendedFrom(node: Node, parent: Node): Boolean = {
+    if (node == null) {
+      false
+    } else if (node.parent == parent) {
+      true
+    } else if (node.parent == root) {
+      false
+    } else {
+      descendedFrom(node.parent, parent)
+    }
+  }
+
+  def hasUpdated(): Boolean = {
+    return getUpdated() != null
+  }
+
+  def getUpdated(): Node = {
+    def innerGetUpdated(node: Node): Node = {
+      if (node.updated) {
+        node
+      } else {
+        var ret: Node = null
+        for (child <- node.children) {
+          if (ret == null) {
+            ret = innerGetUpdated(child)
+          }
+        }
+        ret
+      }
+    }
+
+    innerGetUpdated(root)
   }
 
   override def toString = {

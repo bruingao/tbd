@@ -53,37 +53,33 @@ class Worker(aId: String, aDatastoreRef: ActorRef, parent: ActorRef)
   var awaiting = 0
 
   def propagate(): Boolean = {
-    while (!ddg.updated.isEmpty) {
-      val node = ddg.updated.dequeue
+    while (ddg.hasUpdated()) {
+      val node = ddg.getUpdated()
 
       if (node.isInstanceOf[ReadNode]) {
         val readNode = node.asInstanceOf[ReadNode]
-        //log.debug("Reexecuting read of " + readNode.mod.id)
+        //log.warning("Reexecuting read of " + readNode.mod.id)
 
-        val memoNodes = ddg.cleanupRead(readNode)
+        val dummy = ddg.cleanupRead(readNode)
+        tbd.reexecutingNode = dummy
 
-        val newValue =
+        tbd.currentParent = readNode
+        readNode.updated = false
+
+        val value =
           if (tbd.mods.contains(readNode.mod.id)) {
             tbd.mods(readNode.mod.id)
           } else {
             readNode.mod.read()
           }
 
-        tbd.currentParent = readNode
-	tbd.reexecutionStart = readNode.timestamp
-	tbd.reexecutionEnd = ddg.getTimestampAfter(readNode)
-
-        readNode.updated = false
-        readNode.reader(newValue)
+        readNode.reader(value)
         tbd.updatedMods -= readNode.mod.id
 
-        for (node <- memoNodes) {
-          if (node.parent == null) {
-            ddg.cleanupSubtree(node)
-          }
-        }
+        ddg.cleanupSubtree(dummy)
       } else {
         val parNode = node.asInstanceOf[ParNode]
+        parNode.updated = false
         //assert(awaiting == 0)
 
         if (parNode.pebble1) {

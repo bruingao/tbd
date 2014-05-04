@@ -26,11 +26,13 @@ import tbd.master.Main
 import tbd.messages._
 import tbd.mod.Mod
 
-abstract class Node(aParent: Node, aTimestamp: Timestamp) {
+abstract class Node(aParent: Node) {
   var parent = aParent
-  var timestamp: Timestamp = aTimestamp
 
   var children = MutableList[Node]()
+
+  var pebble: Boolean = false
+  var updated = false
 
   def addChild(child: Node) {
     children += child
@@ -55,10 +57,9 @@ abstract class Node(aParent: Node, aTimestamp: Timestamp) {
   }
 }
 
-class ReadNode(aMod: Mod[Any], aParent: Node, aTimestamp: Timestamp, aReader: Any => Changeable[Any])
-    extends Node(aParent, aTimestamp) {
+class ReadNode(aMod: Mod[Any], aParent: Node, aReader: Any => Changeable[Any])
+    extends Node(aParent) {
   val mod: Mod[Any] = aMod
-  var updated = false
   val reader = aReader
 
   override def toString(prefix: String) = {
@@ -69,13 +70,14 @@ class ReadNode(aMod: Mod[Any], aParent: Node, aTimestamp: Timestamp, aReader: An
 	""
       }
 
-    prefix + "ReadNode modId=(" + mod.id + ") " + " time=" + timestamp +
-      value + " updated=(" + updated + ")" + super.toString(prefix)
+    prefix + "ReadNode modId=(" + mod.id + ") " +
+      value + " updated=(" + updated + ") pebble=" + pebble + " " + this +
+      super.toString(prefix)
   }
 }
 
-class WriteNode(aMod: Mod[Any], aParent: Node, aTimestamp: Timestamp)
-    extends Node(aParent, aTimestamp) {
+class WriteNode(aMod: Mod[Any], aParent: Node)
+    extends Node(aParent) {
   val mod: Mod[Any] = aMod
 
   override def toString(prefix: String) = {
@@ -87,15 +89,14 @@ class WriteNode(aMod: Mod[Any], aParent: Node, aTimestamp: Timestamp)
       }
 
     prefix + "WriteNode modId=(" + mod.id + ") " +
-      value + " time=" + timestamp + super.toString(prefix)
+      value + super.toString(prefix)
   }
 }
 
 class ParNode(
     aWorkerRef1: ActorRef,
     aWorkerRef2: ActorRef,
-    aParent: Node,
-    aTimestamp: Timestamp) extends Node(aParent, aTimestamp) {
+    aParent: Node) extends Node(aParent) {
   val workerRef1 = aWorkerRef1
   val workerRef2 = aWorkerRef2
 
@@ -109,25 +110,24 @@ class ParNode(
     val output1 = Await.result(future1, DURATION).asInstanceOf[String]
     val output2 = Await.result(future2, DURATION).asInstanceOf[String]
 
-    prefix + "ParNode time=" + timestamp + " pebbles=(" + pebble1 + ", " +
+    prefix + "ParNode pebbles=(" + pebble1 + ", " +
       pebble2 + ")\n" + output1 + "\n" + output2 + super.toString(prefix)
   }
 }
 
 class MemoNode(
     aParent: Node,
-    aTimestamp: Timestamp,
-    aSignature: List[Any]) extends Node(aParent, aTimestamp) {
+    aSignature: List[Any]) extends Node(aParent) {
   val signature = aSignature
 
   override def toString(prefix: String) = {
-    prefix + "MemoNode time=" + timestamp + " signature=" + signature +
-      super.toString(prefix)
+    prefix + "MemoNode signature=" + signature +
+      " pebble=" + pebble + super.toString(prefix)
   }
 }
 
-class RootNode(id: String) extends Node(null, null) {
+class RootNode(id: String) extends Node(null) {
   override def toString(prefix: String) = {
-    prefix + "RootNode id=(" + id + ")" + super.toString(prefix)
+    prefix + "RootNode id=(" + id + ") pebble=" + pebble + " " + this + super.toString(prefix)
   }
 }
