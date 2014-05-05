@@ -22,7 +22,7 @@ import scala.concurrent.{Await, Future}
 
 import tbd.Constants._
 import tbd.TBD
-import tbd.ddg.{DDG, ParNode, ReadNode}
+import tbd.ddg.{DDG, Node, ParNode, ReadNode}
 import tbd.memo.MemoEntry
 import tbd.messages._
 import tbd.mod.{AdjustableList, ModId}
@@ -53,9 +53,9 @@ class Worker(aId: String, aDatastoreRef: ActorRef, parent: ActorRef)
   var awaiting = 0
 
   def propagate(): Boolean = {
-    while (ddg.hasUpdated()) {
-      val node = ddg.getUpdated()
+    var node: Node = ddg.getUpdated()
 
+    while (node != null) {
       if (node.isInstanceOf[ReadNode]) {
         val readNode = node.asInstanceOf[ReadNode]
         //log.warning("Reexecuting read of " + readNode.mod.id)
@@ -97,6 +97,8 @@ class Worker(aId: String, aDatastoreRef: ActorRef, parent: ActorRef)
 
         return false
       }
+
+      node = ddg.getUpdated()
     }
 
     return true
