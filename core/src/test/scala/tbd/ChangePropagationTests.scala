@@ -35,17 +35,17 @@ class PropagationOrderTest extends Adjustable {
     val one = tbd.input.get[Mod[Int]](1)
 
     tbd.mod((dest: Dest[Int]) => {
-      tbd.read(one, (v1: Int) => {
+      tbd.read(one)(v1 => {
         assert(num == 0)
         num += 1
-        tbd.read(one, (v2: Int) => {
+        tbd.read(one)(v2 => {
           assert(num == 1)
           num += 1
           tbd.write(dest, v2)
         })
       })
 
-      tbd.read(one, (v3: Int) => {
+      tbd.read(one)(v3 => {
         assert(num == 2)
         tbd.write(dest, v3)
       })

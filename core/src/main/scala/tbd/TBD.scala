@@ -62,7 +62,7 @@ class TBD(
   // During change propagation, the read currently being reexecuted.
   var reexecutingNode: Node = null
 
-  def read[T, U](mod: Mod[T], reader: T => (Changeable[U])): Changeable[U] = {
+  def read[T, U](mod: Mod[T])(reader: T => (Changeable[U])): Changeable[U] = {
     val readNode = worker.ddg.addRead(mod.asInstanceOf[Mod[Any]],
                                       currentParent,
                                       reader.asInstanceOf[Any => Changeable[Any]])
@@ -194,7 +194,7 @@ class TBD(
 
   def map[T, U](arr: Array[Mod[T]], func: T => U): Array[Mod[U]] = {
     arr.map((elem) =>
-      mod((dest: Dest[U]) => read(elem, (value: T) => write(dest, func(value)))))
+      mod((dest: Dest[U]) => read(elem)((value) => write(dest, func(value)))))
   }
 
 

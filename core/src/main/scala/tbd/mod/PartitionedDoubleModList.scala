@@ -60,9 +60,9 @@ class PartitionedDoubleModList[T](
   */
   def foldl(tbd: TBD, initialValueMod: Mod[T], f: (TBD, T, T) => T) : Mod[T] = {
     throw new java.lang.UnsupportedOperationException("Not Implemented")
-    tbd.mod((dest : Dest[T]) => 
-    tbd.read(initialValueMod, (initialValue: T) =>
-    tbd.write(dest, initialValue))) 
+    tbd.mod((dest : Dest[T]) =>
+      tbd.read(initialValueMod)(initialValue =>
+        tbd.write(dest, initialValue)))
   }
 
   def reduce(tbd: TBD, initialValueMod: Mod[T], f: (TBD, T, T) => T) : Mod[T] = {

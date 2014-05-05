@@ -33,10 +33,10 @@ class MemoTest extends Adjustable {
     val lift = tbd.makeLift[Mod[Int]]()
 
     tbd.mod((dest: Dest[Int]) => {
-      tbd.read(one, (oneValue: Int) => {
+      tbd.read(one)(oneValue => {
         if (oneValue == 3) {
           tbd.mod((dest: Dest[Int]) => {
-            tbd.read(one, (oneValueAgain: Int) => {
+            tbd.read(one)(oneValueAgain => {
               tbd.write(dest, oneValueAgain)
             })
           })
@@ -44,13 +44,13 @@ class MemoTest extends Adjustable {
         val memoMod = lift.memo(List(two), () => {
           tbd.mod((memoDest: Dest[Int]) => {
 	    count += 1
-	    tbd.read(two, (valueTwo: Int) => {
+	    tbd.read(two)(valueTwo => {
 	      tbd.write(memoDest, valueTwo + 1)
 	    })
           })
         })
 
-        tbd.read(memoMod, (memoValue: Int) => {
+        tbd.read(memoMod)(memoValue => {
           tbd.write(dest, oneValue + memoValue)
         })
       })
@@ -78,12 +78,12 @@ class AlreadyMatchedTest extends Adjustable {
     val lift = tbd.makeLift[Changeable[Int]]()
 
     tbd.mod((dest: Dest[Int]) => {
-      tbd.read(one, (oneValue: Int) => {
+      tbd.read(one)(oneValue => {
         if (oneValue == 3) {
           tbd.mod((dest: Dest[Int]) => {
             lift.memo(List(two), () => {
 	      count1 += 1
-	      tbd.read(two, (twoValue: Int) => {
+	      tbd.read(two)(twoValue => {
 	        tbd.write(dest, twoValue + 2)
 	      })
             })
@@ -92,7 +92,7 @@ class AlreadyMatchedTest extends Adjustable {
 
         lift.memo(List(two), () => {
 	    count2 += 1
-	    tbd.read(two, (twoValue: Int) => {
+	    tbd.read(two)(twoValue => {
 	      tbd.write(dest, twoValue + 1)
           })
         })
@@ -110,7 +110,7 @@ class OutOfScopeTest extends Adjustable {
     val lift = tbd.makeLift[Changeable[Int]]()
 
     tbd.mod((dest: Dest[Int]) => {
-      tbd.read(one, (oneValue: Int) => {
+      tbd.read(one)(oneValue => {
 	if (oneValue != 1) {
 	  lift.memo(List(two, dest), () => {
 	    num += 1
@@ -142,7 +142,7 @@ class MatchingSignaturesTest extends Adjustable {
     val lift = tbd.makeLift[Changeable[Int]]()
 
     tbd.mod((dest: Dest[Int]) => {
-      tbd.read(one, (oneValue: Int) => {
+      tbd.read(one)(oneValue => {
         lift.memo(List(two, dest), () => {
           count1 += 1
           tbd.write(dest, 0)
@@ -151,7 +151,7 @@ class MatchingSignaturesTest extends Adjustable {
     })
 
     tbd.mod((dest: Dest[Int]) => {
-      tbd.read(one, (oneValue: Int) => {
+      tbd.read(one)(oneValue => {
         lift.memo(List(two, dest), () => {
           count2 += 1
           tbd.write(dest, 0)

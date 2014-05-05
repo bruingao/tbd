@@ -32,7 +32,7 @@ class DoubleModList[T](
     if (parallel) {
       new DoubleModList(
         tbd.mod((dest: Dest[DoubleModListNode[U]]) => {
-          tbd.read(head, (node: DoubleModListNode[T]) => {
+          tbd.read(head)(node => {
             if (node != null) {
               node.parMap(tbd, dest, f)
             } else {
@@ -47,7 +47,7 @@ class DoubleModList[T](
 
         new DoubleModList(
           tbd.mod((dest: Dest[DoubleModListNode[U]]) => {
-            tbd.read(head, (node: DoubleModListNode[T]) => {
+            tbd.read(head)(node => {
               if (node != null) {
                 node.memoMap(tbd, dest, f, lift)
               } else {
@@ -59,7 +59,7 @@ class DoubleModList[T](
       } else {
         new DoubleModList(
           tbd.mod((dest: Dest[DoubleModListNode[U]]) => {
-            tbd.read(head, (node: DoubleModListNode[T]) => {
+            tbd.read(head)(node => {
               if (node != null) {
                 node.map(tbd, dest, f)
               } else {
@@ -74,15 +74,15 @@ class DoubleModList[T](
 
   def foldl(
       tbd: TBD,
-      initialValueMod: Mod[T], 
+      initialValueMod: Mod[T],
       f: (TBD, T, T) => T): Mod[T] = {
     tbd.mod((dest: Dest[T]) => {
-      tbd.read(head, (node: DoubleModListNode[T]) => {
+      tbd.read(head)(node => {
         if(node != null) {
           node.foldl(tbd, dest, initialValueMod, f)
         } else {
-          tbd.read(initialValueMod, (initialValue: T) => 
-            tbd.write(dest, initialValue)) 
+          tbd.read(initialValueMod)(initialValue =>
+            tbd.write(dest, initialValue))
         }
       })
     })
@@ -94,30 +94,30 @@ class DoubleModList[T](
       f: (TBD, T, T) => T): Mod[T] = {
     tbd.mod((dest: Dest[T]) =>
       reduceHelper(tbd, initialValueMod, head, dest, f))
-  }      
-   
+  }
+
   def reduceHelper(
       tbd: TBD,
       initialValueMod: Mod[T],
       head: Mod[DoubleModListNode[T]],
-      dest: Dest[T],  
+      dest: Dest[T],
       f: (TBD, T, T) => T): Changeable[T] = {
-    tbd.read(head, (head: DoubleModListNode[T]) => {
+    tbd.read(head)(head => {
       if(head != null) {
-        tbd.read(head.next, (next: DoubleModListNode[T]) => {
+        tbd.read(head.next)(next => {
           if(next != null) {
             val newListMod = tbd.mod((dest: Dest[DoubleModListNode[T]]) => {
               head.reducePairs(tbd, dest, f)
             })
             reduceHelper(tbd, initialValueMod, newListMod, dest, f)
           } else {
-            tbd.read(head.valueMod, (value: T) => 
-              tbd.read(initialValueMod, (initialValue: T) => 
+            tbd.read(head.valueMod)(value =>
+              tbd.read(initialValueMod)(initialValue =>
                 tbd.write(dest, f(tbd, value, initialValue))))
           }
         })
       } else {
-        tbd.read(initialValueMod, (initialValue: T) => 
+        tbd.read(initialValueMod)(initialValue =>
           tbd.write(dest, initialValue))
       }
     })
@@ -133,7 +133,7 @@ class DoubleModList[T](
 
       new DoubleModList(
         tbd.mod((dest: Dest[DoubleModListNode[T]]) => {
-          tbd.read(head, (node: DoubleModListNode[T]) => {
+          tbd.read(head)(node => {
             if (node != null) {
               node.memoFilter(tbd, dest, pred, lift)
             } else {
@@ -145,7 +145,7 @@ class DoubleModList[T](
     } else {
       new DoubleModList(
         tbd.mod((dest: Dest[DoubleModListNode[T]]) => {
-          tbd.read(head, (node: DoubleModListNode[T]) => {
+          tbd.read(head)(node => {
             if (node != null) {
               node.filter(tbd, dest, pred)
             } else {
