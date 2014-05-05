@@ -49,6 +49,22 @@ class ListFilterTest(partitions: Int) extends Adjustable {
   }
 }
 
+class ListFoldlSumTest extends Adjustable {
+  def run(tbd: TBD): Mod[Int] = {
+    val modList = tbd.input.getAdjustableList[Int](partitions = 1)
+    val zero = tbd.mod((dest : Dest[Int]) => tbd.write(dest, 0))
+    modList.foldl(tbd, zero, (tbd: TBD, a: Int, b:Int) => a + b)
+  }
+}
+
+class ListReduceSumTest extends Adjustable {
+  def run(tbd: TBD): Mod[Int] = {
+    val modList = tbd.input.getAdjustableList[Int](partitions = 1)
+    val zero = tbd.mod((dest : Dest[Int]) => tbd.write(dest, 0))
+    modList.reduce(tbd, zero, (tbd: TBD, a: Int, b:Int) => a + b)
+  }
+}
+
 class ListTests extends FlatSpec with Matchers {
   "ListMapTest" should "return the mapped list" in {
     val mutator = new Mutator()
@@ -232,5 +248,85 @@ class ListTests extends FlatSpec with Matchers {
 
       mutator.shutdown()
     }
+  }
+
+  "ListFoldlSumTest" should "return the reduced list" in {    
+    val mutator = new Mutator()
+    mutator.put("one", 1)
+    mutator.put("two", 2)
+    val output = mutator.run[Mod[Int]](new ListFoldlSumTest())
+    // 1 + 2 = 3
+    output.read() should be (3)
+
+    mutator.put("three", 3)
+    mutator.propagate()
+    // 1 + 2 + 3 = 6
+    output.read() should be (6)
+
+    mutator.update("one", 4)
+    mutator.propagate()
+    // 4 + 2 + 3 = 9
+    output.read() should be (9)
+
+    mutator.update("three", 2)
+    mutator.update("one", 7)
+    mutator.propagate()
+    // 7 + 2 + 2 = 11
+    output.read() should be (11)
+
+    mutator.put("four", -1)
+    mutator.put("five", 10)
+    mutator.propagate()
+    // 7 + 2 + 2 - 1 + 10 = 20
+    output.read() should be (20)
+
+    mutator.put("six", -3)
+    mutator.update("four", 3)
+    mutator.update("three", 5)
+    mutator.propagate()
+    // 7 + 2 + 5 + 3 + 10 - 3 = 24
+    output.read() should be (24)
+
+    mutator.shutdown()
+  }
+  
+  "ListReduceSumTest" should "return the reduced list" in {    
+    val mutator = new Mutator()
+    mutator.put("one", 1)
+    mutator.put("two", 2)
+    val output = mutator.run[Mod[Int]](new ListReduceSumTest())
+    // 1 + 2 = 3
+    output.read() should be (3)
+
+    mutator.put("three", 3)
+    mutator.propagate()
+    // 1 + 2 + 3 = 6
+    output.read() should be (6)
+
+    mutator.update("one", 4)
+    mutator.propagate()
+    // 4 + 2 + 3 = 9
+    output.read() should be (9)
+
+    mutator.update("three", 2)
+    mutator.update("one", 7)
+    mutator.propagate()
+    // 7 + 2 + 2 = 11
+    output.read() should be (11)
+
+    mutator.put("four", -1)
+    mutator.put("five", 10)
+    mutator.propagate()
+    // 7 + 2 + 2 - 1 + 10 = 20
+    output.read() should be (20)
+
+    mutator.put("six", -3)
+    mutator.update("four", 3)
+    mutator.update("three", 5)
+    mutator.propagate()
+    // 7 + 2 + 5 + 3 + 10 - 3 = 24
+    output.read() should be (24)
+
+    mutator.shutdown()
   }
 }

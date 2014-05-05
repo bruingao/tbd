@@ -72,6 +72,57 @@ class DoubleModList[T](
     }
   }
 
+  def foldl(
+      tbd: TBD,
+      initialValueMod: Mod[T], 
+      f: (TBD, T, T) => T): Mod[T] = {
+    tbd.mod((dest: Dest[T]) => {
+      tbd.read(head, (node: DoubleModListNode[T]) => {
+        if(node != null) {
+          node.foldl(tbd, dest, initialValueMod, f)
+        } else {
+          tbd.read(initialValueMod, (initialValue: T) => 
+            tbd.write(dest, initialValue)) 
+        }
+      })
+    })
+  }
+
+  def reduce(
+      tbd: TBD,
+      initialValueMod: Mod[T],
+      f: (TBD, T, T) => T): Mod[T] = {
+    tbd.mod((dest: Dest[T]) =>
+      reduceHelper(tbd, initialValueMod, head, dest, f))
+  }      
+   
+  def reduceHelper(
+      tbd: TBD,
+      initialValueMod: Mod[T],
+      head: Mod[DoubleModListNode[T]],
+      dest: Dest[T],  
+      f: (TBD, T, T) => T): Changeable[T] = {
+    tbd.read(head, (head: DoubleModListNode[T]) => {
+      if(head != null) {
+        tbd.read(head.next, (next: DoubleModListNode[T]) => {
+          if(next != null) {
+            val newListMod = tbd.mod((dest: Dest[DoubleModListNode[T]]) => {
+              head.reducePairs(tbd, dest, f)
+            })
+            reduceHelper(tbd, initialValueMod, newListMod, dest, f)
+          } else {
+            tbd.read(head.valueMod, (value: T) => 
+              tbd.read(initialValueMod, (initialValue: T) => 
+                tbd.write(dest, f(tbd, value, initialValue))))
+          }
+        })
+      } else {
+        tbd.read(initialValueMod, (initialValue: T) => 
+          tbd.write(dest, initialValue))
+      }
+    })
+  }
+
   def filter(
       tbd: TBD,
       pred: T => Boolean,
