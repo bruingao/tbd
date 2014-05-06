@@ -43,7 +43,7 @@ class Worker(aId: String, aDatastoreRef: ActorRef, parent: ActorRef)
   val adjustableLists = Set[AdjustableList[Any]]()
 
   private var task: Task = null
-  private val tbd = new TBD(id, this)
+  val tbd = new TBD(id, this)
 
   var nextModId = 0
 
@@ -53,55 +53,8 @@ class Worker(aId: String, aDatastoreRef: ActorRef, parent: ActorRef)
   var awaiting = 0
 
   def propagate(): Boolean = {
-    var node: Node = ddg.getUpdated()
-
-    while (node != null) {
-      if (node.isInstanceOf[ReadNode]) {
-        val readNode = node.asInstanceOf[ReadNode]
-        //log.warning("Reexecuting read of " + readNode.mod.id)
-
-        val dummy = ddg.cleanupRead(readNode)
-        tbd.reexecutingNode = dummy
-
-        tbd.currentParent = readNode
-        readNode.updated = false
-
-        val value =
-          if (tbd.mods.contains(readNode.mod.id)) {
-            tbd.mods(readNode.mod.id)
-          } else {
-            readNode.mod.read()
-          }
-
-        readNode.reader(value)
-        tbd.updatedMods -= readNode.mod.id
-
-        ddg.cleanupSubtree(dummy)
-      } else {
-        val parNode = node.asInstanceOf[ParNode]
-        parNode.updated = false
-        //assert(awaiting == 0)
-
-        if (parNode.pebble1) {
-          parNode.workerRef1 ! PropagateMessage
-          parNode.pebble1 = false
-          awaiting = 1
-        }
-
-        if (parNode.pebble2) {
-          parNode.workerRef2 ! PropagateMessage
-          parNode.pebble2 = false
-          awaiting += 1
-        }
-        //assert(awaiting > 0)
-
-        return false
-      }
-
-      node = ddg.getUpdated()
-    }
-
-    return true
+    awaiting += ddg.root.propagate(this)
+    return awaiting == 0
   }
 
   private def get(key: ModId): Any = {

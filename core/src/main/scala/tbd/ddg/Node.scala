@@ -25,6 +25,7 @@ import tbd.Constants._
 import tbd.master.Main
 import tbd.messages._
 import tbd.mod.Mod
+import tbd.worker.Worker
 
 abstract class Node(aParent: Node) {
   var parent = aParent
@@ -41,6 +42,8 @@ abstract class Node(aParent: Node) {
   def removeChild(child: Node) {
     children = children.filter(_ != child)
   }
+
+  def propagate(worker: Worker): Int
 
   def toString(prefix: String): String = {
     if (children.isEmpty) {
@@ -62,6 +65,39 @@ class ReadNode(aMod: Mod[Any], aParent: Node, aReader: Any => Changeable[Any])
   val mod: Mod[Any] = aMod
   val reader = aReader
 
+  def propagate(worker: Worker): Int = {
+    if (updated) {
+      val dummy = worker.ddg.cleanupRead(this)
+      worker.tbd.reexecutingNode = dummy
+
+      worker.tbd.currentParent = this
+      updated = false
+
+      val value =
+        if (worker.tbd.mods.contains(mod.id)) {
+          worker.tbd.mods(mod.id)
+        } else {
+          mod.read()
+        }
+
+      reader(value)
+      worker.tbd.updatedMods -= mod.id
+
+      worker.ddg.cleanupSubtree(dummy)
+    }
+
+    var count = 0
+    for (child <- children) {
+      if (child.pebble) {
+        count += child.propagate(worker)
+      }
+    }
+
+    pebble = false
+
+    count
+  }
+
   override def toString(prefix: String) = {
     val value = 
       if (Main.debug) {
@@ -80,8 +116,10 @@ class WriteNode(aMod: Mod[Any], aParent: Node)
     extends Node(aParent) {
   val mod: Mod[Any] = aMod
 
+  def propagate(worker: Worker): Int = 0
+
   override def toString(prefix: String) = {
-    val value = 
+    val value =
       if (Main.debug) {
 	" value=" + mod
       } else {
@@ -103,6 +141,30 @@ class ParNode(
   var pebble1 = false
   var pebble2 = false
 
+  def propagate(worker: Worker): Int = {
+    var count = 0
+
+    if (updated) {
+      updated = false
+
+      if (pebble1) {
+        workerRef1 ! PropagateMessage
+        pebble1 = false
+        count += 1
+      }
+
+      if (pebble2) {
+        workerRef2 ! PropagateMessage
+        pebble2 = false
+        count += 1
+      }
+    }
+
+    pebble = false
+
+    count
+  }
+
   override def toString(prefix: String) = {
     val future1 = workerRef1 ? DDGToStringMessage(prefix + "|")
     val future2 = workerRef2 ? DDGToStringMessage(prefix + "|")
@@ -120,6 +182,20 @@ class MemoNode(
     aSignature: List[Any]) extends Node(aParent) {
   val signature = aSignature
 
+  def propagate(worker: Worker): Int = {
+    var count = 0
+
+    for (child <- children) {
+      if (child.pebble) {
+        count += child.propagate(worker)
+      }
+    }
+
+    pebble = false
+
+    count
+  }
+
   override def toString(prefix: String) = {
     prefix + "MemoNode signature=" + signature +
       " pebble=" + pebble + super.toString(prefix)
@@ -127,6 +203,22 @@ class MemoNode(
 }
 
 class RootNode(id: String) extends Node(null) {
+  def propagate(worker: Worker): Int = {
+    var count = 0
+
+    if (pebble) {
+      for (child <- children) {
+        if (child.pebble) {
+          count += child.propagate(worker)
+        }
+      }
+    }
+
+    pebble = false
+
+    count
+  }
+
   override def toString(prefix: String) = {
     prefix + "RootNode id=(" + id + ") pebble=" + pebble + " " + this + super.toString(prefix)
   }

@@ -39,9 +39,9 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
     parent.addChild(readNode)
 
     if (reads.contains(mod.id)) {
-      reads(mod.id) += readNode.asInstanceOf[ReadNode]
+      reads(mod.id) += readNode
     } else {
-      reads(mod.id) = Set(readNode.asInstanceOf[ReadNode])
+      reads(mod.id) = Set(readNode)
     }
 
     readNode
@@ -73,13 +73,23 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
     assert(reads.contains(modId))
     for (readNode <- reads(modId)) {
       readNode.updated = true
+      pebble(readNode)
     }
+  }
+
+  private def pebble(node: Node) {
+    if (!node.pebble && node.parent != null) {
+      pebble(node.parent)
+    }
+
+    node.pebble = true
   }
 
   // Pebbles a par node. Returns true iff the pebble did not already exist.
   def parUpdated(workerRef: ActorRef): Boolean = {
     val parNode = pars(workerRef)
     parNode.updated = true
+    pebble(parNode)
 
     if (parNode.workerRef1 == workerRef) {
       val ret = !parNode.pebble1
@@ -134,12 +144,15 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
   }
 
   def attachSubtree(parent: Node, subtree: Node) {
-    if (subtree.parent != null) {
-      subtree.parent.removeChild(subtree)
-    }
+    assert(subtree.parent != null)
+    subtree.parent.removeChild(subtree)
 
     parent.addChild(subtree)
     subtree.parent = parent
+
+    if (subtree.pebble) {
+      pebble(subtree.parent)
+    }
   }
 
   def descendedFrom(node: Node, parent: Node): Boolean = {
@@ -154,22 +167,28 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
     }
   }
 
-  def hasUpdated(): Boolean = {
-    return getUpdated() != null
-  }
-
+  var currentNode = root
   def getUpdated(): Node = {
     def innerGetUpdated(node: Node): Node = {
       if (node.updated) {
+        node.pebble = false
         node
       } else {
-        var ret: Node = null
+        var updated: Node = null
+        var pebble = false
         for (child <- node.children) {
-          if (ret == null) {
-            ret = innerGetUpdated(child)
+          if (updated == null && child.pebble) {
+            updated = innerGetUpdated(child)
+          }
+
+          if (child.pebble) {
+            pebble = true
           }
         }
-        ret
+
+        node.pebble = pebble
+
+        updated
       }
     }
 
