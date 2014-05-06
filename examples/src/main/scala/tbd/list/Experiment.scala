@@ -27,6 +27,10 @@ class Experiment(conf: ExperimentConf) {
   val rand = new scala.util.Random()
   val wc = new WC()
 
+  var nextChunk = 0
+  val activeChunks = ArrayBuffer[Int]()
+  val activeChunkValues = Map[Int, String]()
+
   print("desc\tpages\tinitial")
   for (percent <- conf.percents) {
     print("\t" + (percent * 100) + "%")
@@ -56,21 +60,8 @@ class Experiment(conf: ExperimentConf) {
       chunks += new String(bb)
       bytesRead = bis.read(bb, 0, conf.chunkSize)
     }
-  }
 
-  var nextChunk = 0
-  val activeChunks = ArrayBuffer[Int]()
-  val activeChunkValues = Map[Int, String]()
-  def addInput(start: Int, stop: Int, main: Main) {
-    val mutator = new Mutator(main)
-
-    var i = start
-    while (i < stop) {
-      putChunk(mutator)
-      i += 1
-    }
-
-    mutator.shutdown()
+    source.close()
   }
 
   def putChunk(mutator: Mutator) {
