@@ -62,30 +62,6 @@ class DoubleModListNode[T](
     })
   }
 
-  def reducePairs(
-      tbd: TBD, 
-      dest: Dest[DoubleModListNode[T]],
-      f: (TBD, T, T) => T): Changeable[DoubleModListNode[T]] = {
-    tbd.read(next)(next => {
-      if(next != null) {
-        val newValueMod = tbd.mod((dest: Dest[T]) => 
-          tbd.read(next.valueMod)(nextValue =>
-            tbd.read(valueMod)(value =>
-              tbd.write(dest, f(tbd, value, nextValue)))))
-        val newNext = tbd.mod((dest: Dest[DoubleModListNode[T]]) =>
-          tbd.read(next.next)(nextNext => {
-            if(nextNext != null) {
-              nextNext.reducePairs(tbd, dest, f)
-            } else {
-              tbd.write(dest, null)
-            }}))
-        tbd.write(dest, new DoubleModListNode(newValueMod, newNext))
-      } else {
-        tbd.write(dest, this)
-      }
-    })
-  }
-
   def memoMap[W](
       tbd: TBD,
       dest: Dest[DoubleModListNode[W]],

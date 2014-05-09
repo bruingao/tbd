@@ -329,4 +329,20 @@ class ListTests extends FlatSpec with Matchers {
 
     mutator.shutdown()
   }
+  "BigListReduceSumTest" should "return the reduced big list" in {    
+    val mutator = new Mutator()
+    
+    var sum = 0;
+
+    for(i <- 0 to 100) {
+      val r = rand.nextInt(100)
+      mutator.put(i.toString, r)
+      sum = sum + r
+    }
+    
+    val output = mutator.run[Mod[Int]](new ListReduceSumTest())
+    output.read() should be (sum)
+
+    mutator.shutdown()
+  }
 }

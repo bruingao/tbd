@@ -33,6 +33,7 @@ object TBDBuild extends Build {
     file("core"),
     settings = buildSettings ++ Seq (
       libraryDependencies ++= commonDeps,
+      javaOptions += "-Xss64M",
       mkrun := {
         val classpath = (fullClasspath in Runtime).value.files.absString
         val template = """#!/bin/sh
@@ -57,7 +58,7 @@ object TBDBuild extends Build {
       mkexamples := {
         val classpath = (fullClasspath in Runtime).value.files.absString
         val template = """#!/bin/sh
-        java -Xmx2g -Xss4m -classpath "%s" %s $@
+        java -Xmx8g -Xss256m -classpath "%s" %s $@
         """
 
         val experiment = template.format(classpath, "tbd.examples.list.Experiment")

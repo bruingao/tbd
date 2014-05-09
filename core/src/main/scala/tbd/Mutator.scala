@@ -24,7 +24,17 @@ import tbd.master.Main
 import tbd.messages._
 import tbd.mod.Mod
 
-class Mutator(main: Main = new Main()) {
+class Mutator(aMain: Main = null) {
+  var launchedMain = false
+
+  val main =
+    if (aMain == null) {
+      launchedMain = true
+      new Main()
+    } else {
+      aMain
+    }
+
   val idFuture = main.masterRef ? RegisterMutatorMessage
   val id = Await.result(idFuture, DURATION).asInstanceOf[Int]
 
@@ -66,6 +76,10 @@ class Mutator(main: Main = new Main()) {
   }
 
   def shutdown() {
-    Await.result(main.masterRef ? ShutdownMutatorMessage(id), DURATION)
+    if (launchedMain) {
+      main.shutdown()
+    } else {
+      Await.result(main.masterRef ? ShutdownMutatorMessage(id), DURATION)
+    }
   }
 }

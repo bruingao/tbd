@@ -24,11 +24,11 @@ class ListNode[T](aValue: T, aNext: ListNode[T]) {
   val next = aNext
 }
 
-object SimpleMap {
+class SimpleMap(
+    chunkSize: Int,
+    count: Int) {
   val chunks = ArrayBuffer[String]()
   def loadFile(chunkSize: Int) {
-    val source = scala.io.Source.fromFile("input.txt")
-
     val bb = new Array[Byte](chunkSize)
     val bis = new BufferedInputStream(new FileInputStream(new File("input.txt")))
     var bytesRead = bis.read(bb, 0, chunkSize)
@@ -37,9 +37,11 @@ object SimpleMap {
       chunks += new String(bb)
       bytesRead = bis.read(bb, 0, chunkSize)
     }
+
+    bis.close()
   }
 
-  def run(count: Int, repeat: Int, chunkSize: Int): Long = {
+  def run(): Long = {
     var i = 0
 
     loadFile(chunkSize)
@@ -59,25 +61,10 @@ object SimpleMap {
         new ListNode[U](f(lst.value), null)
     }
 
-    // Warmup run.
-    val wc = new WC()
-    val mapped = map(tail, MapAdjust.mapper(null, (_: String)))
+    val before = System.currentTimeMillis()
+    map(tail, MapAdjust.mapper(null, (_: String)))
+    val time = System.currentTimeMillis() - before
 
-    var j = 0
-    var total: Long = 0
-    while (j < repeat) {
-      val before = System.currentTimeMillis()
-
-      val wc = new WC()
-      val mapped = map(tail, MapAdjust.mapper(null, (_: String)))
-
-      total += System.currentTimeMillis() - before
-
-      j += 1
-    }
-
-    println("smap\t" + count + "\t" + total / repeat)
-
-    total / repeat
+    time
   }
 }

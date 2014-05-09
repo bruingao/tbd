@@ -15,18 +15,25 @@
  */
 package tbd.examples.list
 
-class ExperimentConf {
-  var repeat = 3
+import scala.collection.mutable.Map
 
-  var chunkSize = 1024 * 20
+class ControlExperiment(aConf: Map[String, _])
+    extends Experiment(aConf) {
+  def run() = {
+    val results = Map[String, Double]()
 
-  var counts = Array(200, 400, 600)
+    val alg = algorithm match {
+      case "nmap" => new SimpleMap(chunkSize, count)
+    }
 
-  var percents = Array(.01, .05, .1)
+    val time = alg.run()
+    results("initial") = time
 
-  var partitions = 10
+    for (percent <- percents) {
+      results(percent) = time
+    }
 
-  var descriptions = Array("smap", "seq", "par", "memo", "memopar")
-
-  var algorithm = "map"
+    results
+  }
 }
+

@@ -61,6 +61,27 @@ class TBD(
 
   // During change propagation, the read currently being reexecuted.
   var reexecutingNode: Node = null
+  
+  def read2[T, V, U](a: Mod[T], b: Mod[V])
+                    (reader: (T, V) => (Changeable[U])): Changeable[U] = {
+    read(a)((a) => {
+      read(b)((b) => reader(a, b))
+    })
+  }
+
+  def apply[T, V, U](a: Mod[T], b: Mod[V], f:(TBD, T, V) => U): Mod[U] = {
+    this.mod((dest: Dest[U]) => {
+      read2(a, b)((a, b) => {
+        write(dest, f(this, a, b))
+      })
+    })
+  }
+
+  def increment(mod: Mod[Int]): Mod[Int] = {
+    this.mod((dest: Dest[Int]) =>
+      read(mod)(mod => 
+        write(dest, mod + 1)))
+  }
 
   def read[T, U](mod: Mod[T])(reader: T => (Changeable[U])): Changeable[U] = {
     val readNode = worker.ddg.addRead(mod.asInstanceOf[Mod[Any]],
@@ -96,6 +117,12 @@ class TBD(
     }
 
     changeable
+  }
+
+  def createMod[T](value: T): Mod[T] = {
+    this.mod((dest: Dest[T]) => {
+      write(dest, value)
+    })
   }
 
   def mod[T](initializer: Dest[T] => Changeable[T]): Mod[T] = {
@@ -141,8 +168,22 @@ class TBD(
     updated
   }
 
+  def makeLift[T](dummy:Boolean = false) = {
+    if(dummy) {
+      makeDummyLift[T]()
+    } else {
+      makeRealLift[T]()
+    }
+  }
+
+  def makeDummyLift[T](): Lift[T] = {
+    new Lift((aArgs: List[Mod[_]], func: () => T) => {
+      func()
+    })
+  }
+
   var memoId = 0
-  def makeLift[T](): Lift[T] = {
+  def makeRealLift[T](): Lift[T] = {
     val thisMemoId = memoId
     memoId += 1
     new Lift((aArgs: List[Mod[_]], func: () => T) => {
