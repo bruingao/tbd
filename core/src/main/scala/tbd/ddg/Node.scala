@@ -35,6 +35,10 @@ abstract class Node(aParent: Node) {
   var pebble: Boolean = false
   var updated = false
 
+  // Whether this node can be memo matched. Gets set to false if a descendant
+  // of this node is matched.
+  var matchable = true
+
   def addChild(child: Node) {
     children += child
   }

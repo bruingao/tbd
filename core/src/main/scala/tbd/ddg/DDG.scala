@@ -145,7 +145,14 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
 
   def attachSubtree(parent: Node, subtree: Node) {
     assert(subtree.parent != null)
-    subtree.parent.removeChild(subtree)
+    var oldParent = subtree.parent
+    while (oldParent != null) {
+      val oldParentParent = oldParent.parent
+      oldParent.matchable = false
+      oldParent = oldParentParent
+    }
+
+    //subtree.parent.removeChild(subtree)
 
     parent.addChild(subtree)
     subtree.parent = parent

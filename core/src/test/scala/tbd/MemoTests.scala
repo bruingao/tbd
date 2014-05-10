@@ -132,6 +132,8 @@ class OutOfScopeTest extends Adjustable {
   }
 }
 
+// Checks that if two calls to memo occur with the same signature, they both get
+// matched during propagation.
 class MatchingSignaturesTest extends Adjustable {
   var count1 = 0
   var count2 = 0
@@ -160,6 +162,45 @@ class MatchingSignaturesTest extends Adjustable {
     })
 
     0
+  }
+}
+
+// Checks that if a call to memo gets matched, a call that is also within the
+// same reexecuting read but a parent of the already matched memo can't be
+// matched (since part of its ddg has been cannabilized by the first match).
+class MatchParentTest extends Adjustable {
+  var count1 = 0
+  var count2 = 0
+  var count3 = 0
+  var count4 = 0
+
+  def run(tbd: TBD): Mod[Int] = {
+    val one = tbd.input.get[Mod[Int]](1)
+    val two = tbd.input.get[Mod[Int]](2)
+    val three = tbd.input.get[Mod[Int]](3)
+    val lift = tbd.makeLift[Unit]()
+
+    tbd.mod((dest: Dest[Int]) => {
+      tbd.read(one)(oneValue => {
+        if (oneValue == 1) {
+          lift.memo(List(two), () => {
+            count1 += 1
+            lift.memo(List(three), () => {
+              count2 += 1
+            })
+          })
+        } else {
+          lift.memo(List(three), () => {
+            count3 += 1
+          })
+          lift.memo(List(two), () => {
+            count4 += 1
+          })
+        }
+
+        tbd.write(dest, 0)
+      })
+    })
   }
 }
 
@@ -269,6 +310,30 @@ class MemoTests extends FlatSpec with Matchers {
     mutator.propagate()
     test.count1 should be (1)
     test.count2 should be (1)
+
+    mutator.shutdown()
+  }
+
+  "MatchParentTest" should "not match the parent" in {
+    val mutator = new Mutator()
+    mutator.put(1, 1)
+    mutator.put(2, 2)
+    mutator.put(3, 3)
+    val test = new MatchParentTest()
+
+    mutator.run[Mod[Int]](test)
+    test.count1 should be (1)
+    test.count2 should be (1)
+    test.count3 should be (0)
+    test.count4 should be (0)
+
+    mutator.update(1, 4)
+    mutator.propagate()
+
+    test.count1 should be (1)
+    test.count2 should be (1)
+    test.count3 should be (0)
+    test.count4 should be (1)
 
     mutator.shutdown()
   }

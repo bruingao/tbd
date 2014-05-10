@@ -199,7 +199,9 @@ class TBD(
           // Search through the memo entries matching this signature to see if
           // there's one that's descended from the reexecuting read.
           for (memoEntry <- worker.memoTable(signature)) {
-            if (!found && worker.ddg.descendedFrom(memoEntry.node, reexecutingNode)) {
+            if (!found &&
+                worker.ddg.descendedFrom(memoEntry.node, reexecutingNode) &&
+                memoEntry.node.matchable) {
               found = true
               worker.ddg.attachSubtree(currentParent, memoEntry.node)
               toRemove = memoEntry
