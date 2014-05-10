@@ -152,8 +152,6 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
       oldParent = oldParentParent
     }
 
-    //subtree.parent.removeChild(subtree)
-
     parent.addChild(subtree)
     subtree.parent = parent
 

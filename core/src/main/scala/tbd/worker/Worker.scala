@@ -41,7 +41,6 @@ class Worker(aId: String, aDatastoreRef: ActorRef, parent: ActorRef)
   val ddg = new DDG(log, id, this)
   val memoTable = Map[List[Any], ArrayBuffer[MemoEntry]]()
   val adjustableLists = Set[AdjustableList[Any]]()
-  val toCleanUp = new MutableList[Node]()
 
   private var task: Task = null
   val tbd = new TBD(id, this)
