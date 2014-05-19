@@ -32,16 +32,16 @@ import tbd.datastore.Datastore
  * The 'parallel' and 'memo' parameters to these functions are performance hints
  * and may be ignored by some subclasses.
  */
-trait AdjustableList[T] {
+trait AdjustableList[T, U] {
   /**
    * Returns a AdjustableList containing the results of applying the given
    * function to each of the elements of this AdjustableList.
    */
-  def map[U](
+  def map[V, Q](
       tbd: TBD,
-      f: (TBD, T) => U,
+      f: (TBD, T, U) => (V, Q),
       parallel: Boolean = false,
-      memoized: Boolean = true): AdjustableList[U]
+      memoized: Boolean = true): AdjustableList[V, Q]
 
   /**
    * Returns a AdjustableList containing all of the elements from this
@@ -49,22 +49,21 @@ trait AdjustableList[T] {
    */
   def filter(
       tbd: TBD,
-      pred: T => Boolean,
+      pred: (T, U) => Boolean,
       parallel: Boolean = false,
-      memoized: Boolean = true): AdjustableList[T]
-  
-  /**
-   * Reduces all elements in the list using f, from left to right, starting with 
-   * initialValue
-   */
-  def foldl(tbd: TBD, initialValueMod: Mod[T], f: (TBD, T, T) => T) : Mod[T]
+      memoized: Boolean = true): AdjustableList[T, U]
 
   /**
-   * Reduces all elements in the list using f, in an unspecified order, starting with 
-   * initialValue
+   * Reduces all elements in the list using f, in an unspecified order,
+   * starting with initialValue
    */
-  def reduce(tbd: TBD, initialValueMod: Mod[T], f: (TBD, T, T) => T) : Mod[T]
+  def reduce(
+      tbd: TBD,
+      initialValueMod: Mod[(T, U)],
+      f: (TBD, T, U, T, U) => (T, U),
+      parallel: Boolean = false,
+      memoized: Boolean = true) : Mod[(T, U)]
 
   /* Meta functions */
-  def toBuffer(): Buffer[T]
+  def toBuffer(): Buffer[U]
 }

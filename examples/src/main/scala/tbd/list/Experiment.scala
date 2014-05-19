@@ -15,13 +15,13 @@
  */
 package tbd.examples.list
 
-import scala.collection.mutable.Map
+import scala.collection.mutable.{ArrayBuffer, Map}
 
 abstract class Experiment(aConf: Map[String, _]) {
   val conf = aConf
   val algorithm = conf("algorithms")
-  val chunkSize = conf("chunkSizes").asInstanceOf[String].toInt
   val count = conf("counts").asInstanceOf[String].toInt
+  val chunkSize = conf("chunkSizes").asInstanceOf[String].toInt
   val mutations = conf("mutations").asInstanceOf[Array[String]]
   val partition = conf("partitions").asInstanceOf[String].toInt
   val percents = conf("percents").asInstanceOf[Array[String]]
@@ -30,25 +30,60 @@ abstract class Experiment(aConf: Map[String, _]) {
 }
 
 object Experiment {
-  val usage = """
-    Usage: run.sh [--repeat num] [--counts int,int,...] [--percents float,float,...]
-      [--chunkSize int] [--descriptions seq,par,memo,...] [--partitions int]
+  val usage ="""Usage: run.sh [OPTION]...
+
+Options:
+  -a, --algorithms s,s,...   Algorithms to run, where s could be: map,nmap,
+                               pmap,mpmap,mmap,filter,etc.
+  -c, --check                Turns output checking on, for debugging.
+  -h, --help                 Display this message.
+  -m, --mutations s,s,...    Mutations to perform on the input data. Must be
+                               one of 'update', 'insert', or 'remove'.
+  -n, --counts n,n,...       Number of chunks to load initially.
+  -o, --output chart,line,x  How to format the printed results - each of
+                               'chart', 'line', and 'x' must be one of
+                               'algorithms', 'chunkSizes', 'counts',
+                               'partitons', or 'percents', with one required
+                               to be 'percents'.
+  -p, --partitions n,n,...   Number of partitions for the input data.
+  -r, --repeat n             Number of times to repeat each experiment.
+  -s, --chunkSizes n,n,...   Size of each chunk in the list, in KB.
+  -%, --percents f,f,...     Percent of chunks to update before running
+                               change propagation, as a decimal.=
   """
 
   var repeat = 3
 
+  var inputSize = 0
+
+  var check = false
+
   val confs = Map(("algorithms" -> Array("nmap", "mpmap")),
-                  ("chunkSizes" -> Array("20000")),
                   ("counts" -> Array("1000")),
+		  ("chunkSizes" -> Array("1")),
                   ("mutations" -> Array("insert", "update", "remove")),
-                  ("partitions" -> Array("10")),
+                  ("partitions" -> Array("8")),
                   ("percents" -> Array("initial", ".01", ".05", ".1")),
-                  ("print" -> Array("percents", "algorithms", "counts")))
+                  ("output" -> Array("percents", "algorithms", "counts")))
 
   val allResults = Map[Experiment, Map[String, Double]]()
 
   def round(value: Double): Double = {
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+  }
+
+
+  def loadPages(): ArrayBuffer[String] = {
+    val chunks = ArrayBuffer[String]()
+    val elems = scala.xml.XML.loadFile("wiki.xml")
+
+    (elems \\ "elem").map(elem => {
+      (elem \\ "value").map(value => {
+	chunks += value.text
+      })
+    })
+
+    chunks
   }
 
   /**
@@ -107,38 +142,46 @@ object Experiment {
   }
 
   def main(args: Array[String]) {
-    def parse(list: List[String]) {
-      list match {
-        case Nil =>
-        case "--algorithms" :: value :: tail =>
-          confs("algorithms") = value.split(",")
-          parse(tail)
-        case "--chunkSizes" :: value :: tail =>
-          confs("chunkSizes") = value.split(",")
-          parse(tail)
-        case "--counts" :: value :: tail =>
-          confs("counts") = value.split(",")
-          parse(tail)
-        case "--mutations" :: value :: tail =>
-          confs("mutations") = value.split(",")
-          parse(tail)
-        case "--partitions" :: value :: tail =>
-          confs("partitions") = value.split(",")
-          parse(tail)
-        case "--percents" :: value :: tail =>
-          confs("percents") = "initial" +: value.split(",")
-          parse(tail)
-        case "--repeat" :: value :: tail =>
-          repeat = value.toInt
-          parse(tail)
-        case "--print" :: value :: tail =>
-          confs("print") = value.split(",")
-          assert(confs("print").size == 3)
-          parse(tail)
-        case option :: tail => println("Unknown option " + option + "\n" + usage)
+    var i = 0
+    while (i < args.size) {
+      args(i) match {
+        case "--algorithms" | "-a" =>
+          confs("algorithms") = args(i + 1).split(",")
+	  i += 1
+	case "--check" | "-c" =>
+	  check = true
+        case "--counts" | "-n" =>
+          confs("counts") = args(i + 1).split(",")
+	  i += 1
+        case "--help" | "-h" =>
+          println(usage)
+          sys.exit()
+        case "--mutations" | "-m" =>
+          confs("mutations") = args(i + 1).split(",")
+	  i += 1
+        case "--partitions" | "-p" =>
+          confs("partitions") = args(i + 1).split(",")
+	  i += 1
+        case "--percents" | "-%" =>
+          confs("percents") = "initial" +: args(i + 1).split(",")
+	  i += 1
+        case "--repeat" | "-r" =>
+          repeat = args(i + 1).toInt
+	  i += 1
+        case "--output" | "-o" =>
+          confs("output") = args(i + 1).split(",")
+	  i += 1
+          assert(confs("output").size == 3)
+	case "--chunkSizes" | "-s" =>
+	  confs("chunkSizes") = args(i + 1).split(",")
+	  i += 1
+        case _ =>
+          println("Unknown option " + args(i * 2) + "\n" + usage)
+          sys.exit()
       }
+
+      i += 1
     }
-    parse(args.toList)
 
     for (i <- 0 to repeat) {
       if (i == 0) {
@@ -148,15 +191,16 @@ object Experiment {
       }
 
       for (algorithm <- confs("algorithms")) {
-        for (chunkSize <- confs("chunkSizes")) {
+	for (chunkSize <- confs("chunkSizes")) {
           for (count <- confs("counts")) {
             for (partition <- confs("partitions")) {
-              val conf = Map(("algorithms" -> algorithm),
-                             ("chunkSizes" -> chunkSize),
+	      val conf = Map(("algorithms" -> algorithm),
+			     ("chunkSizes" -> chunkSize),
                              ("counts" -> count),
                              ("mutations" -> confs("mutations")),
                              ("partitions" -> partition),
                              ("percents" -> confs("percents")))
+
 	      val experiment =
 		if (algorithm.startsWith("n")) {
 		  new ControlExperiment(conf)
@@ -164,17 +208,19 @@ object Experiment {
                   new AdjustableExperiment(conf)
 		}
 
-              val results = experiment.run()
-	      println(algorithm + "\t" + count + "\t" + results)
+	      val results = experiment.run()
+	      println(algorithm + "\t" + conf("counts") + " chunks - " +
+		      conf("chunkSizes") + " / chunk")
+	      println(results)
 	      if (i != 0) {
 		Experiment.allResults += (experiment -> results)
-              }
+	      }
             }
           }
         }
       }
     }
 
-    printCharts(confs("print")(0), confs("print")(1), confs("print")(2))
+    printCharts(confs("output")(0), confs("output")(1), confs("output")(2))
   }
 }

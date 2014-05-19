@@ -13,12 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd
+package tbd.datastore
 
-import akka.util.Timeout
-import scala.concurrent.duration._
+import akka.actor.ActorRef
 
-object Constants {
-  val DURATION = 10.seconds
-  implicit val TIMEOUT = Timeout(DURATION)
+class ModModifier[T, U](_datastore: Datastore, _key: T, value: U)
+    extends Modifier[T, U](_datastore) {
+  val mod = datastore.createMod(value)
+
+  def insert(key: T, value: U, respondTo: ActorRef): Int = ???
+
+  def update(key: T, value: U, respondTo: ActorRef): Int = {
+    if (key == _key) {
+      datastore.updateMod(mod.id, value, respondTo)
+    } else {
+      0
+    }
+  }
+
+  def remove(key: T, respondTo: ActorRef): Int = ???
+
+  def getModifiable(): Any = mod
 }

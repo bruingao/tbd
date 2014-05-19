@@ -17,8 +17,9 @@ object TBDBuild extends Build {
   val commonDeps = Seq (
     "com.typesafe.akka"          %% "akka-actor"           % "2.3.2",
     "com.typesafe.scala-logging" %% "scala-logging-slf4j"  % "2.0.4",
-    "org.scala-lang.modules"      % "scala-xml_2.11.0-RC1" % "1.0.0",
-    "org.scalatest"              %% "scalatest"            % "2.1.3" % "test"
+
+    "org.scalatest"              %% "scalatest"            % "2.1.3" % "test",
+    "org.scalaz"                 %% "scalaz-core"          % "7.0.6"
   )
 
   val mkrun = TaskKey[File]("mkrun")
@@ -33,7 +34,7 @@ object TBDBuild extends Build {
     file("core"),
     settings = buildSettings ++ Seq (
       libraryDependencies ++= commonDeps,
-      javaOptions += "-Xss64M",
+      javaOptions += "-Xss128M",
       mkrun := {
         val classpath = (fullClasspath in Runtime).value.files.absString
         val template = """#!/bin/sh

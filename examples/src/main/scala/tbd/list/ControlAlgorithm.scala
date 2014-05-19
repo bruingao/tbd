@@ -13,12 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd
+package tbd.examples.list
 
-import akka.util.Timeout
-import scala.concurrent.duration._
-
-object Constants {
-  val DURATION = 10.seconds
-  implicit val TIMEOUT = Timeout(DURATION)
+trait ControlAlgorithm {
+  def run(): Long
 }

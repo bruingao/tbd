@@ -25,23 +25,23 @@ import tbd.mod.{Mod, AdjustableList}
 import tbd.worker.Worker
 
 class Reader(worker: Worker) {
-  def get[T](key: Int): T = {
-    val modFuture = worker.datastoreRef ? GetMessage("input", key)
+  def getMod[T](key: Int): Mod[T] = {
+    val modFuture = worker.datastoreRef ? GetModMessage("input", key)
     Await.result(modFuture, DURATION)
-      .asInstanceOf[T]
+      .asInstanceOf[Mod[T]]
   }
 
-  def getArray[T](): Array[T] = {
-    val arrayFuture = worker.datastoreRef ? GetArrayMessage("input")
-    Await.result(arrayFuture, DURATION)
-      .asInstanceOf[Array[T]]
-  }
+  def getAdjustableList[T, V](
+      partitions: Int = 8,
+      chunkSize: Int = 0,
+      chunkSizer: V => Int = (v: V) => 0): AdjustableList[T, V] = {
+    val anySizer = chunkSizer.asInstanceOf[Any => Int]
+    val message = GetAdjustableListMessage("input", partitions, chunkSize, anySizer)
 
-  def getAdjustableList[T](partitions: Int = 8): AdjustableList[T] = {
-    val adjustableListFuture =
-      worker.datastoreRef ? GetAdjustableListMessage("input", partitions)
+    val adjustableListFuture = worker.datastoreRef ? message
+
     val adjustableList = Await.result(adjustableListFuture, DURATION)
-    worker.adjustableLists += adjustableList.asInstanceOf[AdjustableList[Any]]
-    adjustableList.asInstanceOf[AdjustableList[T]]
+    worker.adjustableLists += adjustableList.asInstanceOf[AdjustableList[Any, Any]]
+    adjustableList.asInstanceOf[AdjustableList[T, V]]
   }
 }

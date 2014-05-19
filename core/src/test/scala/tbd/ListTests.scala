@@ -21,47 +21,48 @@ import org.scalatest._
 import tbd.{Adjustable, Changeable, Mutator, TBD}
 import tbd.mod.{AdjustableList, Dest, Mod}
 
-class ListMapTest extends Adjustable {
-  def run(tbd: TBD): AdjustableList[Int] = {
-    val list = tbd.input.getAdjustableList[Int](partitions = 1)
-    list.map(tbd, (tbd: TBD, value: Int) => value * 2)
-  }
-}
-
-class ListParMapTest extends Adjustable {
-  def run(tbd: TBD): AdjustableList[Int] = {
-    val list = tbd.input.getAdjustableList[Int]()
-    list.map(tbd, (tbd: TBD, value: Int) => value + 1, parallel = true)
+class ListMapTest(
+    f: (TBD, String, Int) => (String, Int),
+    parallel: Boolean) extends Adjustable {
+  def run(tbd: TBD): AdjustableList[String, Int] = {
+    val list = tbd.input.getAdjustableList[String, Int](partitions = 1)
+    list.map(tbd, f)
   }
 }
 
 class ListMemoMapTest extends Adjustable {
-  def run(tbd: TBD): AdjustableList[Int] = {
-    val list = tbd.input.getAdjustableList[Int](partitions = 1)
-    list.map(tbd, (tbd: TBD, value: Int) => value + 3, memoized = true)
+  def run(tbd: TBD): AdjustableList[String, Int] = {
+    val list = tbd.input.getAdjustableList[String, Int](partitions = 1)
+    list.map(tbd,
+             (tbd: TBD, key: String, value: Int) => (key, value + 3),
+             memoized = true)
+  }
+}
+
+class ChunkListMapTest(partitions: Int) extends Adjustable {
+  def run(tbd: TBD): AdjustableList[Int, Int] = {
+    val list = tbd.input.getAdjustableList[Int, Int](partitions = partitions,
+                                                     chunkSize = 2,
+                                                     chunkSizer = _ => 1)
+    list.map(tbd, (tbd: TBD, key: Int, value: Int) => (key, value - 2))
   }
 }
 
 class ListFilterTest(partitions: Int) extends Adjustable {
-  def run(tbd: TBD): AdjustableList[Int] = {
-    val list = tbd.input.getAdjustableList[Int](partitions = partitions)
-    list.filter(tbd, (_: Int) % 2 == 0)
-  }
-}
-
-class ListFoldlSumTest extends Adjustable {
-  def run(tbd: TBD): Mod[Int] = {
-    val modList = tbd.input.getAdjustableList[Int](partitions = 1)
-    val zero = tbd.mod((dest : Dest[Int]) => tbd.write(dest, 0))
-    modList.foldl(tbd, zero, (tbd: TBD, a: Int, b:Int) => a + b)
+  def run(tbd: TBD): AdjustableList[Int, Int] = {
+    val list = tbd.input.getAdjustableList[Int, Int](partitions = partitions)
+    list.filter(tbd, (key: Int, value: Int) => value % 2 == 0)
   }
 }
 
 class ListReduceSumTest extends Adjustable {
-  def run(tbd: TBD): Mod[Int] = {
-    val modList = tbd.input.getAdjustableList[Int](partitions = 1)
-    val zero = tbd.mod((dest : Dest[Int]) => tbd.write(dest, 0))
-    modList.reduce(tbd, zero, (tbd: TBD, a: Int, b:Int) => a + b)
+  def run(tbd: TBD): Mod[(String, Int)] = {
+    val modList = tbd.input.getAdjustableList[String, Int](partitions = 1)
+    val zero = tbd.mod((dest : Dest[(String, Int)]) => tbd.write(dest, ("", 0)))
+    modList.reduce(tbd, zero,
+      (tbd: TBD, ka: String, a: Int, kb: String, b: Int) => {
+        (kb, a + b)
+      })
   }
 }
 
@@ -70,7 +71,9 @@ class ListTests extends FlatSpec with Matchers {
     val mutator = new Mutator()
     mutator.put("one", 1)
     mutator.put("two", 2)
-    val output = mutator.run[AdjustableList[Int]](new ListMapTest())
+    val f = (tbd: TBD, key: String, value: Int) => (key, value * 2)
+    val output =
+      mutator.run[AdjustableList[String, Int]](new ListMapTest(f, false))
     // (1 * 2), (2 * 2)
     output.toBuffer().sortWith(_ < _) should be (Buffer(2, 4))
 
@@ -98,7 +101,8 @@ class ListTests extends FlatSpec with Matchers {
     mutator.put("seven", 5)
     mutator.propagate()
     // (-2 * 2), (2 * 2), (3 * 2), (3 * 2), (8 * 2), (10 * 2), (5 * 2)
-    output.toBuffer().sortWith(_ < _) should be (Buffer(-4, 4, 6, 6, 10, 16, 20))
+    output.toBuffer().sortWith(_ < _) should be 
+                                      (Buffer(-4, 4, 6, 6, 10, 16, 20))
 
     mutator.shutdown()
   }
@@ -107,7 +111,8 @@ class ListTests extends FlatSpec with Matchers {
     val mutator = new Mutator()
     mutator.put("one", 1)
     mutator.put("two", 2)
-    val output = mutator.run[AdjustableList[Int]](new ListParMapTest())
+    val f = (tbd: TBD, key: String, value: Int) => (key, value + 1)
+    val output = mutator.run[AdjustableList[String, Int]](new ListMapTest(f, true))
     // (1 + 1), (2 + 1)
     output.toBuffer().sortWith(_ < _) should be (Buffer(2, 3))
 
@@ -149,7 +154,7 @@ class ListTests extends FlatSpec with Matchers {
     mutator.put("two", 2)
     mutator.put("three", 3)
     mutator.put("four", 4)
-    val output = mutator.run[AdjustableList[Int]](new ListMemoMapTest())
+    val output = mutator.run[AdjustableList[String, Int]](new ListMemoMapTest())
     output.toBuffer().sortWith(_ < _) should be (Buffer(4, 5, 6, 7))
 
     mutator.remove("two")
@@ -222,6 +227,36 @@ class ListTests extends FlatSpec with Matchers {
     }
   }
 
+  "ChunkListMapTest" should "return the filtered list" in {
+    for (partitions <- List(1, 2, 8)) {
+      val mutator = new Mutator()
+      val table = Map[Int, Int]()
+
+      for (i <- 0 to 100) {
+        addValue(mutator, table)
+      }
+
+      val test = new ChunkListMapTest(partitions)
+      val output = mutator.run[AdjustableList[String, Int]](test)
+
+      var answer = table.values.map(_ - 2).toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (answer)
+
+      for (i <- 0 to 5) {
+        for (j <- 0 to 10) {
+          update(mutator, table)
+        }
+
+        mutator.propagate()
+
+        answer = table.values.map(_ - 2).toBuffer.sortWith(_ < _)
+        output.toBuffer().sortWith(_ < _) should be (answer)
+      }
+
+      mutator.shutdown()
+    }
+  }
+
   "ListFilterTest" should "return the filtered list" in {
     for (partitions <- List(1, 2, 8)) {
       val mutator = new Mutator()
@@ -231,7 +266,8 @@ class ListTests extends FlatSpec with Matchers {
         addValue(mutator, table)
       }
 
-      val output = mutator.run[AdjustableList[Int]](new ListFilterTest(partitions))
+      val output = mutator.run[AdjustableList[String, Int]](
+                                            new ListFilterTest(partitions))
       var answer = table.values.filter(_ % 2 == 0).toBuffer.sortWith(_ < _)
       output.toBuffer().sortWith(_ < _) should be (answer)
 
@@ -250,89 +286,49 @@ class ListTests extends FlatSpec with Matchers {
     }
   }
 
-  "ListFoldlSumTest" should "return the reduced list" in {    
-    val mutator = new Mutator()
-    mutator.put("one", 1)
-    mutator.put("two", 2)
-    val output = mutator.run[Mod[Int]](new ListFoldlSumTest())
-    // 1 + 2 = 3
-    output.read() should be (3)
-
-    mutator.put("three", 3)
-    mutator.propagate()
-    // 1 + 2 + 3 = 6
-    output.read() should be (6)
-
-    mutator.update("one", 4)
-    mutator.propagate()
-    // 4 + 2 + 3 = 9
-    output.read() should be (9)
-
-    mutator.update("three", 2)
-    mutator.update("one", 7)
-    mutator.propagate()
-    // 7 + 2 + 2 = 11
-    output.read() should be (11)
-
-    mutator.put("four", -1)
-    mutator.put("five", 10)
-    mutator.propagate()
-    // 7 + 2 + 2 - 1 + 10 = 20
-    output.read() should be (20)
-
-    mutator.put("six", -3)
-    mutator.update("four", 3)
-    mutator.update("three", 5)
-    mutator.propagate()
-    // 7 + 2 + 5 + 3 + 10 - 3 = 24
-    output.read() should be (24)
-
-    mutator.shutdown()
-  }
-  
   "ListReduceSumTest" should "return the reduced list" in {    
     val mutator = new Mutator()
     mutator.put("one", 1)
     mutator.put("two", 2)
-    val output = mutator.run[Mod[Int]](new ListReduceSumTest())
+    val output = mutator.run[Mod[(String, Int)]](new ListReduceSumTest())
     // 1 + 2 = 3
-    output.read() should be (3)
+    output.read()._2 should be (3)
 
     mutator.put("three", 3)
     mutator.propagate()
     // 1 + 2 + 3 = 6
-    output.read() should be (6)
+    output.read()._2 should be (6)
 
     mutator.update("one", 4)
     mutator.propagate()
     // 4 + 2 + 3 = 9
-    output.read() should be (9)
+    output.read()._2 should be (9)
 
     mutator.update("three", 2)
     mutator.update("one", 7)
     mutator.propagate()
     // 7 + 2 + 2 = 11
-    output.read() should be (11)
+    output.read()._2 should be (11)
 
     mutator.put("four", -1)
     mutator.put("five", 10)
     mutator.propagate()
     // 7 + 2 + 2 - 1 + 10 = 20
-    output.read() should be (20)
+    output.read()._2 should be (20)
 
     mutator.put("six", -3)
     mutator.update("four", 3)
     mutator.update("three", 5)
     mutator.propagate()
     // 7 + 2 + 5 + 3 + 10 - 3 = 24
-    output.read() should be (24)
+    output.read()._2 should be (24)
 
     mutator.shutdown()
   }
+
   "BigListReduceSumTest" should "return the reduced big list" in {    
     val mutator = new Mutator()
-    
-    var sum = 0;
+    var sum = 0
 
     for(i <- 0 to 100) {
       val r = rand.nextInt(100)
@@ -340,8 +336,8 @@ class ListTests extends FlatSpec with Matchers {
       sum = sum + r
     }
     
-    val output = mutator.run[Mod[Int]](new ListReduceSumTest())
-    output.read() should be (sum)
+    val output = mutator.run[Mod[(String, Int)]](new ListReduceSumTest())
+    output.read()._2 should be (sum)
 
     mutator.shutdown()
   }

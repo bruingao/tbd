@@ -13,12 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd
+package tbd.memo
 
-import akka.util.Timeout
-import scala.concurrent.duration._
+import scala.collection.mutable.ArrayBuffer
 
-object Constants {
-  val DURATION = 10.seconds
-  implicit val TIMEOUT = Timeout(DURATION)
+import tbd.TBD
+import tbd.mod.Mod
+
+class DummyLift[T](tbd: TBD, memoId: Int) extends Lift[T](tbd, memoId) {
+
+  override def memo(aArgs: List[Mod[_]], func: () => T): T = {
+    func()
+  }
 }

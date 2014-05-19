@@ -28,8 +28,8 @@ class MemoTest extends Adjustable {
   var count = 0
 
   def run(tbd: TBD): Mod[Int] = {
-    val one = tbd.input.get[Mod[Int]](1)
-    val two = tbd.input.get[Mod[Int]](2)
+    val one = tbd.input.getMod[Int](1)
+    val two = tbd.input.getMod[Int](2)
     val lift = tbd.makeLift[Mod[Int]]()
 
     tbd.mod((dest: Dest[Int]) => {
@@ -73,8 +73,8 @@ class AlreadyMatchedTest extends Adjustable {
    * different parameters for the memoized function.
    */
   def run(tbd: TBD): Mod[Int] = {
-    val one = tbd.input.get[Mod[Int]](1)
-    val two = tbd.input.get[Mod[Int]](2)
+    val one = tbd.input.getMod[Int](1)
+    val two = tbd.input.getMod[Int](2)
     val lift = tbd.makeLift[Changeable[Int]]()
 
     tbd.mod((dest: Dest[Int]) => {
@@ -105,8 +105,8 @@ class OutOfScopeTest extends Adjustable {
   var num = 0
 
   def run(tbd: TBD): Int = {
-    val one = tbd.input.get[Mod[Int]](1)
-    val two = tbd.input.get[Mod[Int]](2)
+    val one = tbd.input.getMod[Int](1)
+    val two = tbd.input.getMod[Int](2)
     val lift = tbd.makeLift[Changeable[Int]]()
 
     tbd.mod((dest: Dest[Int]) => {
@@ -139,8 +139,8 @@ class MatchingSignaturesTest extends Adjustable {
   var count2 = 0
 
   def run(tbd: TBD): Int = {
-    val one = tbd.input.get[Mod[Int]](1)
-    val two = tbd.input.get[Mod[Int]](2)
+    val one = tbd.input.getMod[Int](1)
+    val two = tbd.input.getMod[Int](2)
     val lift = tbd.makeLift[Changeable[Int]]()
 
     tbd.mod((dest: Dest[Int]) => {
@@ -175,9 +175,9 @@ class MatchParentTest extends Adjustable {
   var count4 = 0
 
   def run(tbd: TBD): Mod[Int] = {
-    val one = tbd.input.get[Mod[Int]](1)
-    val two = tbd.input.get[Mod[Int]](2)
-    val three = tbd.input.get[Mod[Int]](3)
+    val one = tbd.input.getMod[Int](1)
+    val two = tbd.input.getMod[Int](2)
+    val three = tbd.input.getMod[Int](3)
     val lift = tbd.makeLift[Unit]()
 
     tbd.mod((dest: Dest[Int]) => {

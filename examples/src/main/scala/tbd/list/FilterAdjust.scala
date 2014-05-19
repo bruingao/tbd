@@ -34,23 +34,23 @@ class FilterAdjust(
     partitions: Int,
     parallel: Boolean,
     memoized: Boolean) extends Algorithm {
-  var output: AdjustableList[String] = null
+  var output: AdjustableList[String, Int] = null
 
-  def run(tbd: TBD): AdjustableList[String] = {
-    val pages = tbd.input.getAdjustableList[String](partitions)
-    pages.filter(tbd, (s: String) => FilterAdjust.predicate(s), parallel, memoized)
+  def run(tbd: TBD): AdjustableList[String, Int] = {
+    val pages = tbd.input.getAdjustableList[String, Int](partitions)
+    pages.filter(tbd, (s: String, key: Int) => FilterAdjust.predicate(s), parallel, memoized)
   }
 
   def initialRun(mutator: Mutator) {
-    output = mutator.run[AdjustableList[String]](this)
+    output = mutator.run[AdjustableList[String, Int]](this)
   }
 
   def checkOutput(answer: Map[Int, String]): Boolean = {
     val sortedOutput = output.toBuffer().sortWith(_ < _)
-    val sortedAnswer = answer.values.filter(value => {
+    val sortedAnswer = answer.par.values.filter(value => {
       FilterAdjust.predicate(value)
     }).toBuffer.sortWith(_ < _)
 
-    return sortedOutput == sortedAnswer
+    sortedOutput == sortedAnswer
   }
 }

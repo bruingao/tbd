@@ -13,12 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd
+package tbd.mod
 
-import akka.util.Timeout
-import scala.concurrent.duration._
+import tbd.TBD
 
-object Constants {
-  val DURATION = 10.seconds
-  implicit val TIMEOUT = Timeout(DURATION)
+/**
+ * A simple iterator trait.
+ */
+trait Iterable[T, U, N <: Iterator[T, U, N]] {
+  /**
+   * Returns multiple disjoint iterators for the collection, which can be used
+   * in parallel. It is guaranteed that at least one iterator is returned.
+   */
+  def iterators(tbd: TBD): List[Mod[N]]
 }

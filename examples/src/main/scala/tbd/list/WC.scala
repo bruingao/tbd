@@ -17,10 +17,22 @@ package tbd.examples.list
 
 import scala.collection.mutable.Map
 
-class WC {
+object WC {
   def wordcount(s: String): Map[String, Int] = {
     val counts = Map[String, Int]()
 
+    for (word <- s.split("\\W+")) {
+      if (counts.contains(word)) {
+        counts(word) += 1
+      } else {
+        counts(word) = 1
+      }
+    }
+
+    counts
+  }
+
+  def countReduce(s: String, counts: Map[String, Int]): Map[String, Int] = {
     for (word <- s.split("\\W+")) {
       if (counts.contains(word)) {
         counts(word) += 1

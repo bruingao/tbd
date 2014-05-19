@@ -21,18 +21,17 @@ import scala.collection.mutable.{ArrayBuffer, Buffer, Set}
 import tbd.{Changeable, TBD}
 import tbd.datastore.Datastore
 
-class PartitionedDoubleModList[T, V](
-    aPartitions: ArrayBuffer[DoubleModList[T, V]])
-    extends AdjustableList[T, V] {
+class PartitionedChunkList[T, U](
+    aPartitions: ArrayBuffer[ChunkList[T, U]]) extends AdjustableList[T, U] {
   val partitions = aPartitions
 
-  def map[U, Q](
+  def map[V, Q](
       tbd: TBD,
-      f: (TBD, T, V) => (U, Q),
+      f: (TBD, T, U) => (V, Q),
       parallel: Boolean = true,
-      memoized: Boolean = false): PartitionedDoubleModList[U, Q] = {
+      memoized: Boolean = false): PartitionedChunkList[V, Q] = {
     if (parallel) {
-      def innerMemoParMap(tbd: TBD, i: Int): ArrayBuffer[DoubleModList[U, Q]] = {
+      def innerMemoParMap(tbd: TBD, i: Int): ArrayBuffer[ChunkList[V, Q]] = {
         if (i < partitions.size) {
           val parTup = tbd.par((tbd: TBD) => {
             partitions(i).map(tbd, f, memoized = memoized)
@@ -42,40 +41,40 @@ class PartitionedDoubleModList[T, V](
 
           parTup._2 += parTup._1
         } else {
-          ArrayBuffer[DoubleModList[U, Q]]()
+          ArrayBuffer[ChunkList[V, Q]]()
         }
       }
 
-      new PartitionedDoubleModList(innerMemoParMap(tbd, 0))
+      new PartitionedChunkList(innerMemoParMap(tbd, 0))
     } else {
-      new PartitionedDoubleModList(
-        partitions.map((partition: DoubleModList[T, V]) => {
+      new PartitionedChunkList(
+        partitions.map((partition: ChunkList[T, U]) => {
           partition.map(tbd, f, memoized = memoized)
         })
       )
     }
   }
-
+  
   def reduce(
-      tbd: TBD,
-      initialValueMod: Mod[(T, V)],
-      f: (TBD, T, V, T, V) => (T, V),
+      tbd: TBD, 
+      initialValueMod: Mod[(T, U)], 
+      f: (TBD, T, U, T, U) => (T, U), 
       parallel: Boolean = true,
-      memoized: Boolean = true) : Mod[(T, V)] = {
-
-
-    def parReduce(tbd: TBD, i: Int): Mod[(T, V)] = {
+      memoized: Boolean = true) : Mod[(T, U)] = {
+    
+    
+    def parReduce(tbd: TBD, i: Int): Mod[(T, U)] = {
       if (i < partitions.size) {
         val parTup = tbd.par((tbd: TBD) => {
           partitions(i).reduce(tbd, initialValueMod, f, parallel, memoized)
         }, (tbd: TBD) => {
           parReduce(tbd, i + 1)
         })
-
-
-        tbd.mod((dest: Dest[(T, V)]) => {
+       
+        
+        tbd.mod((dest: Dest[(T, U)]) => {  
           tbd.read2(parTup._1, parTup._2)((a, b) => {
-            tbd.write(dest, f(tbd, a._1, a._2, b._1, b._2))
+            tbd.write(dest, f(tbd, a._1, a._2, b._1, b._2))     
           })
         })
       } else {
@@ -86,12 +85,12 @@ class PartitionedDoubleModList[T, V](
     if(parallel) {
       parReduce(tbd, 0)
     } else {
-      partitions.map((partition: DoubleModList[T, V]) => {
+      partitions.map((partition: ChunkList[T, U]) => {
         partition.reduce(tbd, initialValueMod, f, parallel, memoized)
       }).reduce((a, b) => {
-        tbd.mod((dest: Dest[(T, V)]) => {
+        tbd.mod((dest: Dest[(T, U)]) => {  
           tbd.read2(a, b)((a, b) => {
-            tbd.write(dest, f(tbd, a._1, a._2, b._1, b._2))
+            tbd.write(dest, f(tbd, a._1, a._2, b._1, b._2))     
           })
         })
       })
@@ -100,10 +99,10 @@ class PartitionedDoubleModList[T, V](
 
   def filter(
       tbd: TBD,
-      pred: (T, V) => Boolean,
+      pred: (T, U) => Boolean,
       parallel: Boolean = true,
-      memoized: Boolean = true): PartitionedDoubleModList[T, V] = {
-    def parFilter(tbd: TBD, i: Int): ArrayBuffer[DoubleModList[T, V]] = {
+      memoized: Boolean = true): PartitionedChunkList[T, U] = {
+    def parFilter(tbd: TBD, i: Int): ArrayBuffer[ChunkList[T, U]] = {
       if (i < partitions.size) {
         val parTup = tbd.par((tbd: TBD) => {
           partitions(i).filter(tbd, pred, parallel, memoized)
@@ -113,15 +112,15 @@ class PartitionedDoubleModList[T, V](
 
         parTup._2 += parTup._1
       } else {
-        ArrayBuffer[DoubleModList[T, V]]()
+        ArrayBuffer[ChunkList[T, U]]()
       }
     }
 
     if (parallel) {
-      new PartitionedDoubleModList(parFilter(tbd, 0))
+      new PartitionedChunkList(parFilter(tbd, 0))
     } else {
-      new PartitionedDoubleModList(
-        partitions.map((partition: DoubleModList[T, V]) => {
+      new PartitionedChunkList(
+        partitions.map((partition: ChunkList[T, U]) => {
           partition.filter(tbd, pred, parallel, memoized)
         })
       )
@@ -129,14 +128,14 @@ class PartitionedDoubleModList[T, V](
   }
 
   /* Meta Operations */
-  def toBuffer(): Buffer[V] = {
-    val buf = ArrayBuffer[V]()
+  def toBuffer(): Buffer[U] = {
+    val buf = ArrayBuffer[U]()
 
     for (partition <- partitions) {
       var innerNode = partition.head.read()
       while (innerNode != null) {
-        buf += innerNode.value.read()
-        innerNode = innerNode.next.read()
+        buf ++= innerNode.chunkMod.read().map(pair => pair._2)
+        innerNode = innerNode.nextMod.read()
       }
     }
 

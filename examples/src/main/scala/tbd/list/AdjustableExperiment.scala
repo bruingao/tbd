@@ -23,24 +23,12 @@ import tbd.Mutator
 class AdjustableExperiment(aConf: Map[String, _])
     extends Experiment(aConf) {
   val chunks = ArrayBuffer[String]()
-  def loadFile() {
-    val bb = new Array[Byte](chunkSize)
-    val bis = new BufferedInputStream(new FileInputStream(new File("input.txt")))
-    var bytesRead = bis.read(bb, 0, chunkSize)
-
-    while (bytesRead > 0) {
-      chunks += new String(bb)
-      bytesRead = bis.read(bb, 0, chunkSize)
-    }
-
-    bis.close()
-  }
 
   val rand = new scala.util.Random()
-  val maxKey = count * 2
+  val maxKey = count * 10
   def addValue(mutator: Mutator, table: Map[Int, String]) {
     if (chunks.size == 0) {
-      loadFile()
+      chunks ++= Experiment.loadPages()
     }
 
     var key = rand.nextInt(maxKey)
@@ -68,7 +56,7 @@ class AdjustableExperiment(aConf: Map[String, _])
 
   def updateValue(mutator: Mutator, table: Map[Int, String]) {
     if (chunks.size == 0) {
-      loadFile()
+      chunks ++= Experiment.loadPages()
     }
 
     var key = rand.nextInt(maxKey)
@@ -100,21 +88,33 @@ class AdjustableExperiment(aConf: Map[String, _])
     }
 
     val alg = algorithm match {
+      // Map
       case "map" => new MapAdjust(partition, false, false)
       case "pmap" => new MapAdjust(partition, true, false)
       case "mmap" => new MapAdjust(partition, false, true)
       case "mpmap" => new MapAdjust(partition, true, true)
+
+      case "cmap" => new ChunkMapAdjust(partition, chunkSize, false, false)
+      case "pcmap" => new ChunkMapAdjust(partition, chunkSize, true, false)
+      case "mcmap" => new ChunkMapAdjust(partition, chunkSize, false, true)
+      case "mpcmap" => new ChunkMapAdjust(partition, chunkSize, true, true)
+      // Filter
       case "filter" => new FilterAdjust(partition, false, false)
       case "pfilter" => new FilterAdjust(partition, true, false)
       case "mfilter" => new FilterAdjust(partition, false, true)
       case "mpfilter" => new FilterAdjust(partition, true, true)
+      // Wordcount
+      case "wc" => new WCAdjust(partition, false)
+      case "pwc" => new WCAdjust(partition, true)
     }
 
     val before = System.currentTimeMillis()
     alg.initialRun(mutator)
     val initialElapsed = System.currentTimeMillis() - before
 
-    assert(alg.checkOutput(table))
+    if (Experiment.check) {
+      assert(alg.checkOutput(table))
+    }
 
     results("initial") = initialElapsed
 
@@ -130,7 +130,9 @@ class AdjustableExperiment(aConf: Map[String, _])
         mutator.propagate()
         val elapsed = System.currentTimeMillis() - before2
 
-        assert(alg.checkOutput(table))
+	if (Experiment.check) {
+          assert(alg.checkOutput(table))
+	}
 
         results(percent) = elapsed
       }

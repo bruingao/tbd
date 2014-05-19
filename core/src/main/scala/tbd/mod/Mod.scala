@@ -16,16 +16,36 @@
 package tbd.mod
 
 import akka.actor.ActorRef
+import akka.pattern.ask
+import scala.concurrent.Await
 
+import tbd.Constants._
 import tbd.TBD
 import tbd.messages._
 
-abstract class Mod[T](aId: ModId) {
+class Mod[T](datastoreRef: ActorRef, aId: ModId) {
   val id = aId
 
-  def read(workerRef: ActorRef = null): T
+  def read(workerRef: ActorRef = null): T = {
+    val ret =
+      if (workerRef != null) {
+        val readFuture = datastoreRef ? ReadModMessage(id, workerRef)
+        Await.result(readFuture, DURATION)
+      } else {
+        val readFuture = datastoreRef ? GetMessage("mods", id)
+        Await.result(readFuture, DURATION)
+      }
 
-  def update(value: T, workerRef: ActorRef, tbd: TBD): Int
+    ret match {
+      case NullMessage => null.asInstanceOf[T]
+      case _ => ret.asInstanceOf[T]
+    }
+  }
+
+  def update(value: T, workerRef: ActorRef, tbd: TBD): Int = {
+    val future = datastoreRef ? UpdateModMessage(id, value, workerRef)
+    Await.result(future, DURATION).asInstanceOf[Int]
+  }
 
   override def toString = {
     val value = read()

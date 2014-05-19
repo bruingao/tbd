@@ -20,38 +20,44 @@ import scala.collection.mutable.{ArrayBuffer, Map}
 
 import tbd.mod._
 
-class PDMLModifier[T, U](
-    aDatastore: Datastore,
+class PCLModifier[T, U](
+    _datastore: Datastore,
     table: Map[Any, Any],
-    numPartitions: Int) extends Modifier[T, U](aDatastore) {
+    numPartitions: Int,
+    chunkSize: Int,
+    chunkSizer: U => Int) extends Modifier[T, U](_datastore) {
 
-  val partitionModifiers = ArrayBuffer[DMLModifier[T, U]]()
-  val modList = initialize()
+  val partitionModifiers = ArrayBuffer[ChunkListModifier[T, U]]()
+  val list = initialize()
 
-  private def initialize(): PartitionedDoubleModList[T, U] = {
-    val partitions = new ArrayBuffer[DoubleModList[T, U]]()
-    var dmlModifier = new DMLModifier[T, U](datastore)
+  private def initialize(): PartitionedChunkList[T, U] = {
+    val partitions = new ArrayBuffer[ChunkList[T, U]]()
+    var chunkListModifier =
+      new ChunkListModifier[T, U](datastore, Map[Any, Any](), chunkSize, chunkSizer)
 
     val partitionSize = math.max(1, table.size / numPartitions)
     var i = 1
     for (elem <- table) {
-      dmlModifier.insert(elem._1.asInstanceOf[T],
-			 elem._2.asInstanceOf[U], null)
+      chunkListModifier.insert(elem._1.asInstanceOf[T],
+			       elem._2.asInstanceOf[U], null)
 
       if (i % partitionSize == 0) {
-        partitionModifiers += dmlModifier
-        partitions += dmlModifier.doubleModList
-        dmlModifier = new DMLModifier[T, U](datastore)
+        partitionModifiers += chunkListModifier
+        partitions += chunkListModifier.list
+        chunkListModifier = new ChunkListModifier[T, U](datastore,
+							Map[Any, Any](),
+							chunkSize,
+							chunkSizer)
       }
       i += 1
     }
 
     if ((i - 1) % partitionSize != 0) {
-      partitionModifiers += dmlModifier
-      partitions += dmlModifier.doubleModList
+      partitionModifiers += chunkListModifier
+      partitions += chunkListModifier.list
     }
 
-    new PartitionedDoubleModList[T, U](partitions)
+    new PartitionedChunkList[T, U](partitions)
   }
 
   def insert(key: T, value: U, respondTo: ActorRef): Int = {
@@ -70,7 +76,7 @@ class PDMLModifier[T, U](
     }
 
    if (!found) {
-     println("Warning: tried to update nonexistant key")
+     println("Warning: tried to update nonexistant key " + key)
    }
 
     count
@@ -87,10 +93,12 @@ class PDMLModifier[T, U](
       }
     }
 
+   if (!found) {
+     println("Warning: tried to remove nonexistant key " + key)
+   }
+
     count
   }
 
-  def getModifiable(): AdjustableList[T, U] = {
-    modList
-  }
+  def getModifiable(): AdjustableList[T, U] = list
 }

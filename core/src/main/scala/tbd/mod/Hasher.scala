@@ -20,11 +20,9 @@ class Hasher(
   k: Int,
   m: Int) {
 
-  def binaryHash(id: ModId, round: Int) = {
-    hash(id.value.hashCode() ^ round) == 0
-  }
-
+  val bigM = BigInt(m) 
   var coefs:List[BigInt] = null
+
   def hash(x: Int) = {
     val p = BigInt(1073741789)
 
@@ -32,18 +30,16 @@ class Hasher(
     if(coefs == null) {
       coefs = List()
       val rand = new scala.util.Random()
-      for(i <- 0 to k) {
-        coefs = BigInt(rand.nextInt(1000) + 1) :: coefs
+      for(i <- 0 to k - 1) {
+        coefs = BigInt(rand.nextInt()) :: coefs
       }
     }
 
     val bigX = BigInt(x)
-    val bigM = BigInt(m)
 
     val (s,_) = coefs.foldLeft((BigInt(0), BigInt(k))) {
       (t, c) => (t._1 + c * bigX.modPow(t._2, p), t._2 - 1)
     }
-
     s.mod(bigM).toInt
   }
 }

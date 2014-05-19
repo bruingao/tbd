@@ -24,7 +24,7 @@ import scala.concurrent.Await
 import tbd.Constants._
 import tbd.ddg.Node
 import tbd.master.Main
-import tbd.memo.{Lift, MemoEntry}
+import tbd.memo.{DummyLift, Lift, MemoEntry}
 import tbd.messages._
 import tbd.mod.{Dest, Mod, ModId}
 import tbd.worker.{Worker, Task}
@@ -35,8 +35,8 @@ object TBD {
 
 class TBD(
     id: String,
-    worker: Worker) {
-
+    aWorker: Worker) {
+  val worker = aWorker
   var initialRun = true
 
   // The Node representing the currently executing reader.
@@ -66,14 +66,6 @@ class TBD(
                     (reader: (T, V) => (Changeable[U])): Changeable[U] = {
     read(a)((a) => {
       read(b)((b) => reader(a, b))
-    })
-  }
-
-  def apply[T, V, U](a: Mod[T], b: Mod[V], f:(TBD, T, V) => U): Mod[U] = {
-    this.mod((dest: Dest[U]) => {
-      read2(a, b)((a, b) => {
-        write(dest, f(this, a, b))
-      })
     })
   }
 
@@ -109,6 +101,7 @@ class TBD(
 
     if (worker.ddg.reads.contains(dest.mod.id)) {
       worker.ddg.modUpdated(dest.mod.id)
+      updatedMods += dest.mod.id
     }
 
     val changeable = new Changeable(dest.mod)
@@ -156,7 +149,7 @@ class TBD(
     new Tuple2(oneRet, twoRet)
   }
 
-  private def updated(args: List[ModId]): Boolean = {
+  def updated(args: List[ModId]): Boolean = {
     var updated = false
 
     for (arg <- args) {
@@ -168,71 +161,14 @@ class TBD(
     updated
   }
 
+  var liftId = 0
   def makeLift[T](dummy:Boolean = false) = {
     if(dummy) {
-      makeDummyLift[T]()
+      new DummyLift[T](this, 0)
     } else {
-      makeRealLift[T]()
+      liftId += 1
+      new Lift[T](this, liftId)
     }
-  }
-
-  def makeDummyLift[T](): Lift[T] = {
-    new Lift((aArgs: List[Mod[_]], func: () => T) => {
-      func()
-    })
-  }
-
-  var memoId = 0
-  def makeRealLift[T](): Lift[T] = {
-    val thisMemoId = memoId
-    memoId += 1
-    new Lift((aArgs: List[Mod[_]], func: () => T) => {
-      val args = aArgs.map(_.id)
-      val signature = thisMemoId :: args
-
-      var found = false
-      var toRemove: MemoEntry = null
-      var ret = null.asInstanceOf[T]
-      if (!initialRun && !updated(args)) {
-        if (worker.memoTable.contains(signature)) {
-
-          // Search through the memo entries matching this signature to see if
-          // there's one that's descended from the reexecuting read.
-          for (memoEntry <- worker.memoTable(signature)) {
-            if (!found &&
-                worker.ddg.descendedFrom(memoEntry.node, reexecutingNode) &&
-                memoEntry.node.matchable) {
-              found = true
-              worker.ddg.attachSubtree(currentParent, memoEntry.node)
-              toRemove = memoEntry
-              ret = memoEntry.value.asInstanceOf[T]
-            }
-          }
-        }
-      }
-
-      if (!found) {
-        val memoNode = worker.ddg.addMemo(currentParent, signature)
-        val outerParent = currentParent
-        currentParent = memoNode
-        val value = func()
-        currentParent = outerParent
-
-        val memoEntry = new MemoEntry(value, memoNode)
-
-        if (worker.memoTable.contains(signature)) {
-          worker.memoTable(signature) += memoEntry
-        } else {
-          worker.memoTable += (signature -> ArrayBuffer(memoEntry))
-        }
-
-        ret = value
-      } else {
-        worker.memoTable(signature) -= toRemove
-      }
-
-      ret
-    })
   }
 
   def map[T, U](arr: Array[Mod[T]], func: T => U): Array[Mod[U]] = {

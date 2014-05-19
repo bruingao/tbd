@@ -85,7 +85,6 @@ class ReadNode(aMod: Mod[Any], aParent: Node, aReader: Any => Changeable[Any])
         }
 
       reader(value)
-      worker.tbd.updatedMods -= mod.id
 
       worker.ddg.cleanupSubtree(dummy)
     }
@@ -103,16 +102,8 @@ class ReadNode(aMod: Mod[Any], aParent: Node, aReader: Any => Changeable[Any])
   }
 
   override def toString(prefix: String) = {
-    val value = 
-      if (Main.debug) {
-	" value=" + mod
-      } else {
-	""
-      }
-
     prefix + "ReadNode modId=(" + mod.id + ") " +
-      value + " updated=(" + updated + ") pebble=" + pebble + " " + this +
-      super.toString(prefix)
+      " value=" + mod + " updated=(" + updated + ")" + super.toString(prefix)
   }
 }
 
@@ -123,15 +114,8 @@ class WriteNode(aMod: Mod[Any], aParent: Node)
   def propagate(worker: Worker): Int = 0
 
   override def toString(prefix: String) = {
-    val value =
-      if (Main.debug) {
-	" value=" + mod
-      } else {
-	""
-      }
-
     prefix + "WriteNode modId=(" + mod.id + ") " +
-      value + super.toString(prefix)
+      " value=" + mod + super.toString(prefix)
   }
 }
 

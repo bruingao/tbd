@@ -3,13 +3,17 @@ TBD
 
 Build with SBT (you don't need to install SBT on your machine)
 
+```
 > sbt/sbt
 > compile
 > test
+```
 
 ## Experiment
+```
 >sbt/sbt
 > mkexamples
+```
 
 This will create the script bin/experiment.sh which can be used to run the
 performance experiments.

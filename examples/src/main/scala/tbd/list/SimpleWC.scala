@@ -15,9 +15,9 @@
  */
 package tbd.examples.list
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, Map}
 
-class SimpleMap(
+class SimpleWC(
     count: Int,
     parallel: Boolean) extends ControlAlgorithm {
   val chunks = ArrayBuffer[String]()
@@ -28,7 +28,7 @@ class SimpleMap(
         Vector[String]()
       } else {
         if (chunks.size == 0) {
-	  chunks ++= Experiment.loadPages()
+          chunks ++= Experiment.loadPages()
         }
 
         val elem = chunks.head
@@ -45,8 +45,7 @@ class SimpleMap(
       }
 
     val before = System.currentTimeMillis()
-    vector.map(MapAdjust.mapper(null, 0, (_: String)))
-
+    vector.aggregate(Map[String, Int]())((x, line) => WC.countReduce(line, x), WC.reduce)
     System.currentTimeMillis() - before
   }
 }

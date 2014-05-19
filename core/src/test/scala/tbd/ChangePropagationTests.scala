@@ -21,18 +21,11 @@ import scala.collection.mutable.ArrayBuffer
 import tbd.{Adjustable, Changeable, Mutator, TBD}
 import tbd.mod.{Dest, Mod, AdjustableList}
 
-class ArrayMapTest extends Adjustable {
-  def run(tbd: TBD): Array[Mod[String]] = {
-    val array = tbd.input.getArray[Mod[String]]()
-    tbd.map(array, (_: String) + " mapped")
-  }
-}
-
 class PropagationOrderTest extends Adjustable {
   var num = 0
 
   def run(tbd: TBD): Mod[Int] = {
-    val one = tbd.input.get[Mod[Int]](1)
+    val one = tbd.input.getMod[Int](1)
 
     tbd.mod((dest: Dest[Int]) => {
       tbd.read(one)(v1 => {
@@ -56,35 +49,21 @@ class PropagationOrderTest extends Adjustable {
 class PropagationOrderTest2 extends Adjustable {
   val values = ArrayBuffer[Int]()
 
-  def run(tbd: TBD): AdjustableList[Int] = {
-    val adjustableList = tbd.input.getAdjustableList[Int](partitions = 1)
-    adjustableList.map(tbd, (tbd: TBD, value: Int) => {
+  def run(tbd: TBD): AdjustableList[Int, Int] = {
+    val adjustableList = tbd.input.getAdjustableList[Int, Int](partitions = 1)
+    adjustableList.map(tbd, (tbd: TBD, key: Int, value: Int) => {
       if (tbd.initialRun) {
         values += value
       } else {
         assert(value == values.head + 1)
         values -= values.head
       }
-      value
+      (key, value)
     })
   }
 }
 
 class ChangePropagationTests extends FlatSpec with Matchers {
-  "ArrayMapTest" should "return a correctly mapped array" in {
-    val mutator = new Mutator()
-    mutator.put(1, "one")
-    mutator.put(2, "two")
-    val output = mutator.run[Array[Mod[String]]](new ArrayMapTest())
-    output.deep.mkString(", ") should be ("two mapped, one mapped")
-
-    mutator.update(1, "three")
-    mutator.propagate()
-    output.deep.mkString(", ") should be ("two mapped, three mapped")
-
-    mutator.shutdown()
-  }
-
   "PropagationOrderTest" should "reexecute reads in the correct order" in {
     val mutator = new Mutator()
     mutator.put(1, 1)
@@ -104,11 +83,12 @@ class ChangePropagationTests extends FlatSpec with Matchers {
       mutator.put(i, i)
     }
     val test = new PropagationOrderTest2()
-    mutator.run[AdjustableList[Int]](test)
+    mutator.run[AdjustableList[Int, String]](test)
 
     for (i <- 0 to 100) {
       mutator.update(i, i + 1)
     }
+
     mutator.propagate()
 
     mutator.shutdown()

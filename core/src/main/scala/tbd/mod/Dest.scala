@@ -16,26 +16,22 @@
 package tbd.mod
 
 import akka.actor.ActorRef
+import akka.pattern.ask
+import scala.concurrent.Await
 
+import tbd.Constants._
 import tbd.TBD
 import tbd.master.Main
+import tbd.messages.CreateModMessage
 import tbd.worker.Worker
 
-class Dest[T](worker: Worker, aModId: ModId) extends Mod[T](aModId) {
-  val mod =
-    if (Main.debug) {
-      new DebugMod[T](worker.self, id)
-    } else {
-      new LocalMod[T](worker.self, id)
-    }
+class Dest[T](worker: Worker, aModId: ModId) extends Mod[T](null, aModId) {
+  val future = worker.datastoreRef ? CreateModMessage(null)
+  val mod = Await.result(future, DURATION).asInstanceOf[Mod[T]]
 
   worker.nextModId += 1
 
-  def read(workerRef: ActorRef = null): T = {
-    throw new RuntimeException("Not implemented.")
-  }
+  override def read(workerRef: ActorRef = null): T = ???
 
-  def update(value: T, workerRef: ActorRef, tbd: TBD): Int = {
-    throw new RuntimeException("Not implemented.")
-  }
+  override def update(value: T, workerRef: ActorRef, tbd: TBD): Int = ???
 }

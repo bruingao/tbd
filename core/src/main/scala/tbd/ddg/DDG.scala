@@ -34,7 +34,7 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
   def addRead(
       mod: Mod[Any],
       parent: Node,
-      reader: Any => Changeable[Any]): Node = {
+      reader: Any => Changeable[Any]): ReadNode = {
     val readNode = new ReadNode(mod, parent, reader)
     parent.addChild(readNode)
 

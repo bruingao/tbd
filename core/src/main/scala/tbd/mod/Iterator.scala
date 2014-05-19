@@ -13,12 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd
+package tbd.mod
 
-import akka.util.Timeout
-import scala.concurrent.duration._
+import tbd.TBD
 
-object Constants {
-  val DURATION = 10.seconds
-  implicit val TIMEOUT = Timeout(DURATION)
+/**
+ * A simple iterator trait.
+ */
+trait Iterator[T, U, N <: Iterator[T, U, N]] {
+  /**
+   * The key of the current element.
+   */
+  def key: T
+  /**
+   * The value of the current element.
+   */
+  def value: Mod[U]
+  /**
+   * Returns an interator which referes the next element.
+   */
+  def next: Mod[N]
 }

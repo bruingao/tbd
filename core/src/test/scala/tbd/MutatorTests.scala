@@ -22,8 +22,14 @@ import tbd.{Adjustable, Mutator, TBD}
 import tbd.mod.AdjustableList
 
 class AdjustableListTest extends Adjustable {
-  def run(tbd: TBD): AdjustableList[Int] = {
-    tbd.input.getAdjustableList[Int](partitions = 1)
+  def run(tbd: TBD): AdjustableList[Int, Int] = {
+    tbd.input.getAdjustableList[Int, Int](partitions = 1)
+  }
+}
+
+class ChunkListTest extends Adjustable {
+  def run(tbd: TBD): AdjustableList[Int, Int] = {
+    tbd.input.getAdjustableList[Int, Int](partitions = 1, chunkSize = 100, chunkSizer = _ => 32)
   }
 }
 
@@ -62,58 +68,60 @@ class MutatorTests extends FlatSpec with Matchers {
     }
   }
 
-  "AdjustableListTests" should "update the modList correctly" in {
-    val mutator = new Mutator()
-    val answer = Map[Int, Int]()
+  "AdjustableListTests" should "update the AdjustableList correctly" in {
+    for (adjustable <- List(new AdjustableListTest(), new ChunkListTest())) {
+      val mutator = new Mutator()
+      val answer = Map[Int, Int]()
 
-    var  i  = 0
-    while (i < 100) {
-      answer += (i -> i)
-      mutator.put(i, i)
-      i += 1
-    }
-    val output = mutator.run[AdjustableList[Int]](new AdjustableListTest())
-    var sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-    output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-
-    for (j <- 0 to i - 1) {
-      updateValue(mutator, answer)
-    }
-
-    sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-    output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-
-    while (i < 200) {
-      insertValue(mutator, answer, i)
-      i += 1
-    }
-
-    sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-    output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-
-    for (j <- 0 to 99) {
-      removeValue(mutator, answer)
-    }
-
-    sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-    output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-
-    for (j <- 0 to 99) {
-      rand.nextInt(3) match {
-	case 0 => {
-	  insertValue(mutator, answer, i)
-	  i += 1
-	}
-	case 1 => {
-	  removeValue(mutator, answer)
-	}
-	case 2 => {
-	  updateValue(mutator, answer)
-	}
+      var  i  = 0
+      while (i < 100) {
+        answer += (i -> i)
+        mutator.put(i, i)
+        i += 1
       }
-    }
+      val output = mutator.run[AdjustableList[Int, Int]](adjustable)
+      var sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
 
-    sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-    output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+      for (j <- 0 to i - 1) {
+        updateValue(mutator, answer)
+      }
+
+      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+
+      while (i < 200) {
+        insertValue(mutator, answer, i)
+        i += 1
+      }
+
+      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+
+      for (j <- 0 to 99) {
+        removeValue(mutator, answer)
+      }
+
+      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+
+      for (j <- 0 to 99) {
+        rand.nextInt(3) match {
+	  case 0 => {
+	    insertValue(mutator, answer, i)
+	    i += 1
+	  }
+	  case 1 => {
+	    removeValue(mutator, answer)
+	  }
+	  case 2 => {
+	    updateValue(mutator, answer)
+	  }
+        }
+      }
+
+      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+    }
   }
 }
