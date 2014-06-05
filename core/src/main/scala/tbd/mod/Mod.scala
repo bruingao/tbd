@@ -29,6 +29,7 @@ class Mod[T](_id: ModId, _value: T) {
   var value = _value
   val dependencies = Set[ActorRef]()
   val lock = new Lock()
+  var replacedBy: Mod[_] = null
 
   def read(workerRef: ActorRef = null): T = {
     if (workerRef != null) {
@@ -40,8 +41,9 @@ class Mod[T](_id: ModId, _value: T) {
     value
   }
 
-  def update(_value: T): ArrayBuffer[Future[String]] = {
+  def update(_value: T, _replacedBy: Mod[_] = null): ArrayBuffer[Future[String]] = {
     value = _value
+    replacedBy = _replacedBy
 
     val futures = ArrayBuffer[Future[String]]()
     lock.acquire()

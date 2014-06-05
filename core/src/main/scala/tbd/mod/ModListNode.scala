@@ -30,17 +30,17 @@ class ModListNode[T, V] (
       f: (TBD, (T, V)) => (U, Q),
       lift: Lift[Mod[ModListNode[U, Q]]]
       ): Changeable[ModListNode[U, Q]] = {
-    val newNext = lift.memo(List(next), () => {
-      tbd.mod((dest: Dest[ModListNode[U, Q]]) =>
-        tbd.read(next)(next => {
+    val newNext = //lift.memo(List(next), () => {
+      //tbd.mod((dest: Dest[ModListNode[U, Q]]) =>
+        tbd.readMod(next, lift)((dest: Dest[ModListNode[U, Q]], next: ModListNode[T, V]) => {
           if (next != null) {
             next.map(tbd, dest, f, lift)
           } else {
             tbd.write(dest, null)
           }
         })
-      )
-    })
+      //)
+    //})
     tbd.write(dest, new ModListNode[U, Q](f(tbd, value), newNext))
   }
 
@@ -95,7 +95,7 @@ class ModListNode[T, V] (
         })
       }
     })
-  }
+  }*/
 
   override def toString: String = {
     def toString(lst: ModListNode[T, V]):String = {
@@ -106,9 +106,9 @@ class ModListNode[T, V] (
 	else
 	  ")"
 
-      lst.value + next
+      "key=" + lst.value._1 + " next=" + lst.next.id + next
     }
 
     "ModListNode(" + toString(this)
-  }*/
+  }
 }

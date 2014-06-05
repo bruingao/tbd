@@ -23,7 +23,7 @@ import scala.concurrent.{Await, Future, Promise}
 
 import tbd.Constants._
 import tbd.ddg.{Node, Timestamp}
-import tbd.master.Main
+import tbd.master.{Main, Master}
 import tbd.memo.{DummyLift, Lift, MemoEntry}
 import tbd.messages._
 import tbd.mod.{Dest, Mod}
@@ -130,6 +130,61 @@ class TBD(id: String, _worker: Worker) {
     changeable
   }
 
+  def readMod[T, U](mod: Mod[T], lift: Lift[_])(reader: (Dest[U], T) => Changeable[U]): Mod[U] = {
+    var found = false
+    var ret = null.asInstanceOf[Mod[U]]
+    val signature = List(lift.memoId, mod.id)
+
+    if (!initialRun && worker.readModTable.contains(signature) && !updated(List(mod.id))) {
+      val node = worker.readModTable(signature)
+      val timestamp = node.timestamp
+      if (timestamp > reexecutionStart &&
+	  timestamp < reexecutionEnd &&
+	  node.matchableInEpoch <= Master.epoch) {
+        found = true
+        worker.ddg.attachSubtree(currentParent, node)
+
+	node.matchableInEpoch = Master.epoch + 1
+        ret = node.dest.mod.asInstanceOf[Mod[U]]
+
+	// This ensures that we won't match anything under the currently
+	// reexecuting read that comes before this memo node, since then
+	// the timestamps would be out of order.
+	reexecutionStart = node.endTime
+
+        val future = worker.propagate(timestamp,
+                                      node.endTime)
+        Await.result(future, DURATION)
+      }
+    }
+
+    if (!found) {
+      val modId = new ModId(worker.id + "." + worker.nextModId)
+      worker.nextModId += 1
+
+      val d = new Dest[U](modId)
+
+      val readNode = worker.ddg.addReadMod(mod.asInstanceOf[Mod[Any]],
+					   currentParent,
+					   reader.asInstanceOf[(Dest[Any], Any) => Changeable[Any]])
+      readNode.dest = d.asInstanceOf[Dest[Any]]
+      readNode.memoId = lift.memoId
+
+      val outerReader = currentParent
+      currentParent = readNode
+      reader(d, mod.read(worker.self))
+      currentParent = outerReader
+
+      readNode.endTime = worker.ddg.nextTimestamp(readNode)
+
+      worker.readModTable += (signature -> readNode)
+
+      ret = d.mod
+    }
+
+    ret
+  }
+
   def write[T](dest: Dest[T], value: T): Changeable[T] = {
     awaiting ++= dest.mod.update(value)
 
@@ -171,7 +226,7 @@ class TBD(id: String, _worker: Worker) {
     worker.nextModId += 1
 
     val d = new Dest[T](modId)
-    initializer(d).mod
+    initializer(d)
     d.mod
   }
 
@@ -213,7 +268,8 @@ class TBD(id: String, _worker: Worker) {
   var liftId = 0
   def makeLift[T](dummy:Boolean = false) = {
     if(dummy) {
-      new DummyLift[T](this, 0)
+      liftId += 1
+      new DummyLift[T](this, liftId)
     } else {
       liftId += 1
       new Lift[T](this, liftId)

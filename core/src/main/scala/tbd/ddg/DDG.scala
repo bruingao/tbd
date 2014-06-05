@@ -23,7 +23,7 @@ import tbd.Changeable
 import tbd.Constants._
 import tbd.master.Master
 import tbd.memo.MemoEntry
-import tbd.mod.Mod
+import tbd.mod.{Dest, Mod}
 import tbd.worker.Worker
 
 class DDG(log: LoggingAdapter, id: String, worker: Worker) {
@@ -41,6 +41,23 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
       reader: Any => Changeable[Any]): ReadNode = {
     val timestamp = nextTimestamp(parent)
     val readNode = new ReadNode(mod, parent, timestamp, reader)
+    parent.addChild(readNode)
+
+    if (reads.contains(mod.id)) {
+      reads(mod.id) += readNode.asInstanceOf[ReadNode]
+    } else {
+      reads(mod.id) = Set(readNode.asInstanceOf[ReadNode])
+    }
+
+    readNode
+  }
+
+  def addReadMod(
+      mod: Mod[Any],
+      parent: Node,
+      reader: (Dest[Any], Any) => Changeable[Any]): ReadModNode = {
+    val timestamp = nextTimestamp(parent)
+    val readNode = new ReadModNode(mod, parent, timestamp, reader)
     parent.addChild(readNode)
 
     if (reads.contains(mod.id)) {

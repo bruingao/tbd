@@ -99,11 +99,22 @@ class ModListModifier[T, U](
     while (innerNode != null && !found) {
       if (innerNode.value._1 == key) {
         if (previousNode != null) {
+	  var replacedBy: Mod[_] = innerNode.next
+	  while (replacedBy.replacedBy != null) {
+	    replacedBy = replacedBy.replacedBy
+	  }
           futures = datastore.updateMod(previousNode.next.id,
-                                        datastore.getMod(innerNode.next.id))
+                                        datastore.getMod(innerNode.next.id),
+					replacedBy)
         } else {
+	  var replacedBy: Mod[_] = innerNode.next
+	  while (replacedBy.replacedBy != null) {
+	    replacedBy = replacedBy.replacedBy
+	  }
+
           futures = datastore.updateMod(modList.head.id,
-                                        datastore.getMod(innerNode.next.id))
+                                        datastore.getMod(innerNode.next.id),
+					replacedBy)
         }
 
         datastore.removeMod(innerNode.next.id)

@@ -24,7 +24,7 @@ import tbd.Changeable
 import tbd.Constants._
 import tbd.master.Main
 import tbd.messages._
-import tbd.mod.Mod
+import tbd.mod.{Dest, Mod}
 
 abstract class Node(_parent: Node, _timestamp: Timestamp) {
   var parent = _parent
@@ -85,6 +85,22 @@ class ReadNode(
     prefix + this + " modId=(" + mod.id + ") " + " time=" + timestamp + " to " + endTime +
       " value=" + mod + " updated=(" + updated + ")" + super.toString(prefix)
   }
+}
+
+class ReadModNode(
+    _mod: Mod[Any],
+    _parent: Node,
+    _timestamp: Timestamp,
+    _modReader: (Dest[Any], Any) => Changeable[Any])
+      extends ReadNode(_mod, _parent, _timestamp, null) {
+  val modReader = _modReader
+  var dest: Dest[Any] = null
+  var memoId = 0
+
+  /*override def toString(prefix: String) = {
+    prefix + this + " modId=(" + mod.id + ") " + " time=" + timestamp + " to " + endTime +
+      " value=" + mod + " updated=(" + updated + ")" + super.toString(prefix)
+  }*/
 }
 
 class WriteNode(_mod: Mod[Any], _parent: Node, _timestamp: Timestamp)

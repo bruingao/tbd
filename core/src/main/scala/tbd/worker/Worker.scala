@@ -23,7 +23,8 @@ import scala.util.Try
 
 import tbd.Constants._
 import tbd.TBD
-import tbd.ddg.{DDG, Node, ParNode, ReadNode, Timestamp}
+import tbd.ddg._
+import tbd.master.Master
 import tbd.memo.MemoEntry
 import tbd.messages._
 import tbd.mod.{AdjustableList}
@@ -43,6 +44,8 @@ class Worker(_id: String, _datastoreRef: ActorRef, parent: ActorRef)
   val datastoreRef = _datastoreRef
   val ddg = new DDG(log, id, this)
   val memoTable = Map[List[Any], ArrayBuffer[MemoEntry]]()
+  val readModTable = Map[List[Any], ReadModNode]()
+
   val adjustableLists = Set[AdjustableList[Any, Any]]()
 
   private val tbd = new TBD(id, this)
@@ -59,6 +62,7 @@ class Worker(_id: String, _datastoreRef: ActorRef, parent: ActorRef)
         ddg.updated -= node
 
         if (node.updated) {
+	  log.debug("propagating " + node)
           if (node.isInstanceOf[ReadNode]) {
             val readNode = node.asInstanceOf[ReadNode]
 
@@ -74,7 +78,50 @@ class Worker(_id: String, _datastoreRef: ActorRef, parent: ActorRef)
 	    tbd.reexecutionEnd = readNode.endTime
 
             readNode.updated = false
-            readNode.reader(newValue)
+
+	    if (readNode.isInstanceOf[ReadModNode]) {
+	      val readModNode = readNode.asInstanceOf[ReadModNode]
+	      var found = false
+
+	      if (readNode.mod.replacedBy != null) {
+		var replacedBy = readNode.mod.replacedBy
+		while (replacedBy.replacedBy != null) {
+		  replacedBy = replacedBy.replacedBy
+		}
+
+		if (readModTable.contains(List(readModNode.memoId, replacedBy.id)) &&
+		    !tbd.updated(List(replacedBy.id))) {
+		  val node = readModTable(List(readModNode.memoId, replacedBy.id))
+		  val timestamp = node.timestamp
+		  if (timestamp > tbd.reexecutionStart &&
+		      timestamp < tbd.reexecutionEnd &&
+		      node.matchableInEpoch <= Master.epoch) {
+		    found = true
+		    for (child <- node.children) {
+		      ddg.attachSubtree(readNode, child)
+		    }
+
+		    readModNode.dest.mod.update(node.dest.mod.read())
+
+		    node.matchableInEpoch = Master.epoch + 1
+
+		    // This ensures that we won't match anything under the currently
+		    // reexecuting read that comes before this memo node, since then
+		    // the timestamps would be out of order.
+		    tbd.reexecutionStart = node.endTime
+
+		    val future = propagate(timestamp, node.endTime)
+		    Await.result(future, DURATION)
+		  }
+		}
+	      }
+
+	      if (!found) {
+		readModNode.modReader(readModNode.dest, newValue)
+	      }
+	    } else {
+              readNode.reader(newValue)
+	    }
 
 	    tbd.currentParent = oldCurrentParent
 	    tbd.reexecutionStart = oldStart
@@ -102,8 +149,6 @@ class Worker(_id: String, _datastoreRef: ActorRef, parent: ActorRef)
         option = ddg.updated.find((node: Node) =>
           node.timestamp > start && node.timestamp < end)
       }
-
-      tbd.updatedMods.clear()
 
       true
     }
@@ -137,6 +182,7 @@ class Worker(_id: String, _datastoreRef: ActorRef, parent: ActorRef)
       val respondTo = sender
       val future = propagate()
       future.onComplete((t: Try[Boolean]) => {
+	tbd.updatedMods.clear()
         respondTo ! "done"
       })
     }

@@ -58,6 +58,7 @@ class Datastore extends Actor with ActorLogging {
     val mod = new Mod[T](new ModId("d." + nextModId), value)
     nextModId += 1
 
+    log.debug("Creating modId=" + mod.id + " value=" + value)
     tables("mods")(mod.id) = mod
     mod
   }
@@ -66,18 +67,26 @@ class Datastore extends Actor with ActorLogging {
     tables("mods")(modId).asInstanceOf[Mod[Any]].value
   }
 
-  def updateMod(modId: ModId, value: Any): ArrayBuffer[Future[String]] = {
+  def updateMod(modId: ModId, value: Any, replacedBy: Mod[_] = null)
+      : ArrayBuffer[Future[String]] = {
     if (!tables("mods").contains(modId)) {
       log.warning("Trying to update non-existent mod " + modId)
     }
 
-    tables("mods")(modId).asInstanceOf[Mod[Any]].update(value)
+    log.debug("Updating " + modId + " from " + tables("mods")(modId) + " to " +
+	      value + " replaced by " + replacedBy)
+    if (replacedBy != null) {
+      log.debug("replaced by id = " + replacedBy.id)
+    }
+    tables("mods")(modId).asInstanceOf[Mod[Any]].update(value, replacedBy)
   }
 
   def removeMod(modId: ModId) {
     if (!tables("mods").contains(modId)) {
       log.warning("Trying to remove nonexistent mod " + modId)
     }
+    log.debug("Removing modId=" + modId + " value=" + tables("mods")(modId))
+    tables("mods")(modId).asInstanceOf[Mod[Any]].replacedBy = null
     tables("mods") -= modId
   }
 

@@ -23,7 +23,8 @@ import tbd.TBD
 import tbd.master.Master
 import tbd.mod.Mod
 
-class Lift[T](tbd: TBD, memoId: Int) {
+class Lift[T](tbd: TBD, _memoId: Int) {
+  val memoId = _memoId
 
   def memo(aArgs: List[Mod[_]], func: () => T): T = {
     val args = aArgs.map(_.id)

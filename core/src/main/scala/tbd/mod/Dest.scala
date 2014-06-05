@@ -30,5 +30,5 @@ class Dest[T](_id: ModId)
 
   override def read(workerRef: ActorRef = null): T = ???
 
-  override def update(value: T): ArrayBuffer[Future[String]] = ???
+  override def update(value: T, replacedBy: Mod[_]): ArrayBuffer[Future[String]] = ???
 }
