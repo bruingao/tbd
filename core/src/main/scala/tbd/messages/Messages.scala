@@ -36,6 +36,12 @@ case class GetModMessage(modId: ModId, workerRef: ActorRef)
 case class UpdateModMessage(modId: ModId, value: Any)
 case class NullMessage()
 
+case class DBPutMessage(key: ModId, value: Any)
+case class DBGetMessage(key: ModId)
+case class DBDeleteMessage(key: ModId)
+case class DBContainsMessage(key: ModId)
+case class DBShutdownMessage()
+
 // Master
 case class RegisterMutatorMessage()
 case class RunMessage(adjust: Adjustable[_], mutatorId: Int)
