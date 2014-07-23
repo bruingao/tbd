@@ -13,11 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd.memo
+package tbd.datastore
 
-import tbd.ddg.MemoNode
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Future
 
-class MemoEntry(_value: Any, _node: MemoNode) {
-  val value = _value
-  val node = _node
+import tbd.mod.ModTable
+
+class TableModifier(_datastore: Datastore) extends Modifier(_datastore) {
+  val table = new ModTable[Any, Any]()
+
+  def insert(key: Any, value: Any): ArrayBuffer[Future[String]] = {
+    table.table(key) = datastore.createMod(value)
+    ArrayBuffer[Future[String]]()
+  }
+
+  def update(key: Any, value: Any): ArrayBuffer[Future[String]] = {
+    datastore.updateMod(table.table(key).id, value)
+  }
+
+  def remove(key: Any): ArrayBuffer[Future[String]] = ???
+
+  def getModifiable(): Any = table
 }

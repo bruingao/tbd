@@ -16,263 +16,215 @@
 package tbd
 
 import akka.pattern.ask
-import akka.actor.ActorRef
-import akka.event.Logging
-import scala.collection.mutable.{ArrayBuffer, ListBuffer, Map, Set}
-import scala.concurrent.{Await, Future, Promise}
+import scala.collection.mutable.ListBuffer
+import scala.concurrent.{Await, Future}
 
 import tbd.Constants._
-import tbd.ddg.{Node, Timestamp}
-import tbd.master.{Main, Master}
-import tbd.memo.{DummyLift, Lift, MemoEntry}
+import tbd.master.Main
 import tbd.messages._
 import tbd.mod.{Dest, Mod}
-import tbd.worker.{Worker, Task}
 
 object TBD {
-  var id = 0
-}
+  def read[T, U <: Changeable[_]](mod: Mod[T])(reader: T => U)(implicit c: Context): U = {
+    val readNode = c.worker.ddg.addRead(mod.asInstanceOf[Mod[Any]],
+					c.currentParent,
+					reader.asInstanceOf[Any => Changeable[Any]])
 
-class TBD(id: String, _worker: Worker) {
-  import worker.context.dispatcher
-  val worker = _worker
-  var initialRun = true
+    val outerReader = c.currentParent
+    c.currentParent = readNode
 
-  // The Node representing the currently executing reader.
-  var currentParent: Node = worker.ddg.root
-  val input = new Reader(worker)
+    val value = mod.read(c.worker.self)
 
-  val log = Logging(worker.context.system, "TBD" + id)
+    val changeable = reader(value)
+    c.currentParent = outerReader
 
-  val awaiting = ArrayBuffer[Future[String]]()
+    readNode.endTime = c.worker.ddg.nextTimestamp(readNode)
+    readNode.currentDest = c.currentDest
+    readNode.currentDest2 = c.currentDest2
 
-  // Contains a list of mods that have been updated since the last run of change
-  // propagation, to determine when memo matches can be made.
-  val updatedMods = Set[ModId]()
+    changeable
+  }
 
-  // The timestamp of the read currently being reexecuting during change
-  // propagation.
-  var reexecutionStart: Timestamp = null
-
-  // The timestamp of the node immediately after the end of the read being
-  // reexecuted.
-  var reexecutionEnd: Timestamp = null
-
-  def read2[T, V, U](a: Mod[T], b: Mod[V])
-                    (reader: (T, V) => (Changeable[U])): Changeable[U] = {
-    read(a)((a) => {
-      read(b)((b) => reader(a, b))
-    })
+  def read2[T, V, U](
+      a: Mod[T],
+      b: Mod[V])
+     (reader: (T, V) => (Changeable[U]))
+     (implicit c: Context): Changeable[U] = {
+    read(a) {
+      case a => read(b) { case b => reader(a, b) }
+    }
   }
 
   /* readN - Read n mods. Experimental function.
    *
    * Usage Example:
    *
-   *  tbd.mod((dest: Dest[AnyRef]) => {
-   *    val a = tbd.createMod("Hello");
-   *    val b = tbd.createMod(12);
-   *    val c = tbd.createMod("Bla");
+   *  mod {
+   *    val a = createMod("Hello");
+   *    val b = createMod(12);
+   *    val c = createMod("Bla");
    *
-   *    tbd.readN(a, b, c)(x => x match {
+   *    readN(a, b, c) {
    *      case Seq(a:String, b:Int, c:String) => {
    *        println(a + b + c)
-   *        tbd.write(dest, null)
+   *        write(dest, null)
    *      }
-   *    })
-   *  })
+   *    }
+   *  }
    */
-  def readN[U](args: Mod[U]*)
-              (reader: (Seq[_]) => (Changeable[U])) : Changeable[U] = {
-
+  def readN[U](
+      args: Mod[U]*)
+     (reader: (Seq[_]) => (Changeable[U]))
+     (implicit c: Context): Changeable[U] = {
     readNHelper(args, ListBuffer(), reader)
   }
 
-  private def readNHelper[U](mods: Seq[Mod[_]],
-                     values: ListBuffer[AnyRef],
-                     reader: (Seq[_]) => (Changeable[U])) : Changeable[U] = {
+  private def readNHelper[U](
+      mods: Seq[Mod[_]],
+      values: ListBuffer[AnyRef],
+      reader: (Seq[_]) => (Changeable[U]))
+     (implicit c: Context): Changeable[U] = {
     val tail = mods.tail
     val head = mods.head
 
-
-    read(head)((value) => {
-      values += value.asInstanceOf[AnyRef]
-      if(tail.isEmpty) {
-        reader(values.toSeq)
-      } else {
-        readNHelper(tail, values, reader)
-      }
-    })
-  }
-
-
-  def increment(mod: Mod[Int]): Mod[Int] = {
-    this.mod((dest: Dest[Int]) =>
-      read(mod)(mod =>
-        write(dest, mod + 1)))
-  }
-
-  def read[T, U](mod: Mod[T])(reader: T => (Changeable[U])): Changeable[U] = {
-    val readNode = worker.ddg.addRead(mod.asInstanceOf[Mod[Any]],
-                                      currentParent,
-                                      reader.asInstanceOf[Any => Changeable[Any]])
-
-    val outerReader = currentParent
-    currentParent = readNode
-
-    val value = mod.read(worker.self)
-
-    val changeable = reader(value)
-    currentParent = outerReader
-
-    readNode.endTime = worker.ddg.nextTimestamp(readNode)
-
-    changeable
-  }
-
-  def readMod[T, U](mod: Mod[T], lift: Lift[_])(reader: (Dest[U], T) => Changeable[U]): Mod[U] = {
-    var found = false
-    var ret = null.asInstanceOf[Mod[U]]
-    val signature = List(lift.memoId, mod.id)
-
-    if (!initialRun && worker.readModTable.contains(signature) && !updated(List(mod.id))) {
-      val node = worker.readModTable(signature)
-      val timestamp = node.timestamp
-      if (timestamp > reexecutionStart &&
-	  timestamp < reexecutionEnd &&
-	  node.matchableInEpoch <= Master.epoch) {
-        found = true
-        worker.ddg.attachSubtree(currentParent, node)
-
-	node.matchableInEpoch = Master.epoch + 1
-        ret = node.dest.mod.asInstanceOf[Mod[U]]
-
-	// This ensures that we won't match anything under the currently
-	// reexecuting read that comes before this memo node, since then
-	// the timestamps would be out of order.
-	reexecutionStart = node.endTime
-
-        val future = worker.propagate(timestamp,
-                                      node.endTime)
-        Await.result(future, DURATION)
-      }
+    read(head) {
+      case value =>
+	values += value.asInstanceOf[AnyRef]
+	if(tail.isEmpty) {
+          reader(values.toSeq)
+	} else {
+          readNHelper(tail, values, reader)
+	}
     }
-
-    if (!found) {
-      val modId = new ModId(worker.id + "." + worker.nextModId)
-      worker.nextModId += 1
-
-      val d = new Dest[U](modId)
-
-      val readNode = worker.ddg.addReadMod(mod.asInstanceOf[Mod[Any]],
-					   currentParent,
-					   reader.asInstanceOf[(Dest[Any], Any) => Changeable[Any]])
-      readNode.dest = d.asInstanceOf[Dest[Any]]
-      readNode.memoId = lift.memoId
-
-      val outerReader = currentParent
-      currentParent = readNode
-      reader(d, mod.read(worker.self))
-      currentParent = outerReader
-
-      readNode.endTime = worker.ddg.nextTimestamp(readNode)
-
-      worker.readModTable += (signature -> readNode)
-
-      ret = d.mod
-    }
-
-    ret
   }
 
-  def write[T](dest: Dest[T], value: T): Changeable[T] = {
-    awaiting ++= dest.mod.update(value)
+  def mod[T](initializer: => Changeable[T])(implicit c: Context): Mod[T] = {
+    val oldCurrentDest = c.currentDest
+    c.currentDest = new Dest[T](c.worker.datastoreRef).asInstanceOf[Dest[Any]]
+    initializer
+    val mod = c.currentDest.mod
+    c.currentDest = oldCurrentDest
 
+    mod.asInstanceOf[Mod[T]]
+  }
+
+  def mod2[T, U](
+      write: Int)
+     (initializer: => Changeable2[T, U])
+     (implicit c: Context): (Mod[T], Mod[U]) = {
+    val oldCurrentDest = c.currentDest
+    c.currentDest =
+      if (write == 0 || write == 2)
+	new Dest[T](c.worker.datastoreRef).asInstanceOf[Dest[Any]]
+      else
+	c.currentDest
+
+    val oldCurrentDest2 = c.currentDest2
+    c.currentDest2 =
+      if (write == 1 || write == 2)
+	new Dest[T](c.worker.datastoreRef).asInstanceOf[Dest[Any]]
+      else
+	c.currentDest2
+
+    initializer
+
+    val mod = c.currentDest.mod
+    c.currentDest = oldCurrentDest
+    val mod2 = c.currentDest2.mod
+    c.currentDest2 = oldCurrentDest2
+
+    (mod.asInstanceOf[Mod[T]], mod2.asInstanceOf[Mod[U]])
+  }
+
+  def write[T](value: T)(implicit c: Context): Changeable[T] = {
+    import c.worker.context.dispatcher
+
+    val awaiting = c.currentDest.mod.update(value)
     Await.result(Future.sequence(awaiting), DURATION)
 
-    val changeable = new Changeable(dest.mod)
+    val changeable = new Changeable(c.currentDest.mod)
     if (Main.debug) {
-      val writeNode = worker.ddg.addWrite(changeable.mod.asInstanceOf[Mod[Any]],
-                                          currentParent)
-      writeNode.endTime = worker.ddg.nextTimestamp(writeNode)
+      val writeNode = c.worker.ddg.addWrite(changeable.mod.asInstanceOf[Mod[Any]],
+                                            c.currentParent)
+      writeNode.endTime = c.worker.ddg.nextTimestamp(writeNode)
     }
 
-    changeable
+    changeable.asInstanceOf[Changeable[T]]
   }
 
-  def createMod[T](value: T): Mod[T] = {
-    this.mod((dest: Dest[T]) => {
-      write(dest, value)
-    })
-  }
-  
-  def mod2[T, V](initializer : (Dest[T], Dest[V]) => Changeable[V]):
-        (Mod[T], Mod[V]) = {
-    var first: Mod[T] = null
-    var second: Mod[V] = null
-    first = this.mod((first: Dest[T]) => {
-      second = this.mod((second: Dest[V]) => {
-        initializer(first, second);
-        new Changeable[V](null)
-      })
-      new Changeable[T](null)
-    })
+  def write2[T, U](value: T, value2: U)(implicit c: Context): Changeable2[T, U] = {
+    import c.worker.context.dispatcher
 
-    (first, second)
+    val awaiting = c.currentDest.mod.update(value)
+    val awaiting2 = c.currentDest2.mod.update(value2)
+    Await.result(Future.sequence(awaiting), DURATION)
+    Await.result(Future.sequence(awaiting2), DURATION)
+
+    write2Helper(c)
   }
 
-  def mod[T](initializer: Dest[T] => Changeable[T]): Mod[T] = {
-    val modId = new ModId(worker.id + "." + worker.nextModId)
-    worker.nextModId += 1
+  def writeLeft[T, U](
+      value: T,
+      mod: Mod[U])
+     (implicit c: Context): Changeable2[T, U] = {
+    import c.worker.context.dispatcher
 
-    val d = new Dest[T](modId)
-    initializer(d)
-    d.mod
-  }
-
-  var workerId = 0
-  def par[T, U](one: TBD => T, two: TBD => U): Tuple2[T, U] = {
-    val task1 =  new Task(((tbd: TBD) => one(tbd)))
-    val workerProps1 =
-      Worker.props(id + "-" + workerId, worker.datastoreRef, worker.self)
-    val workerRef1 = worker.context.system.actorOf(workerProps1, id + "-" + workerId)
-    workerId += 1
-    val oneFuture = workerRef1 ? RunTaskMessage(task1)
-
-    val task2 =  new Task(((tbd: TBD) => two(tbd)))
-    val workerProps2 =
-      Worker.props(id + "-" + workerId, worker.datastoreRef, worker.self)
-    val workerRef2 = worker.context.system.actorOf(workerProps2, id + "-" + workerId)
-    workerId += 1
-    val twoFuture = workerRef2 ? RunTaskMessage(task2)
-
-    worker.ddg.addPar(workerRef1, workerRef2, currentParent)
-
-    val oneRet = Await.result(oneFuture, DURATION).asInstanceOf[T]
-    val twoRet = Await.result(twoFuture, DURATION).asInstanceOf[U]
-    new Tuple2(oneRet, twoRet)
-  }
-
-  def updated(args: List[ModId]): Boolean = {
-    var updated = false
-
-    for (arg <- args) {
-      if (updatedMods.contains(arg)) {
-	updated = true
-      }
+    if (mod != c.currentDest2.mod) {
+      println("WARNING - mod parameter to writeLeft doesn't match currentDest2")
     }
 
-    updated
+    val awaiting = c.currentDest.mod.update(value)
+    Await.result(Future.sequence(awaiting), DURATION)
+
+    write2Helper(c)
   }
 
-  var liftId = 0
-  def makeLift[T](dummy:Boolean = false) = {
+  def writeRight[T, U](
+      mod: Mod[T],
+      value2: U)
+     (implicit c: Context): Changeable2[T, U] = {
+    import c.worker.context.dispatcher
+
+    if (mod != c.currentDest.mod) {
+      println("WARNING - mod parameter to writeRight doesn't match currentDest")
+    }
+
+    val awaiting = c.currentDest2.mod.update(value2)
+    Await.result(Future.sequence(awaiting), DURATION)
+
+    write2Helper(c)
+  }
+
+  private def write2Helper[T, U](c: Context): Changeable2[T, U] = {
+    val changeable = new Changeable2(c.currentDest.mod, c.currentDest2.mod)
+
+    if (Main.debug) {
+      val writeNode = c.worker.ddg.addWrite(changeable.mod.asInstanceOf[Mod[Any]],
+                                            c.currentParent)
+      writeNode.mod2 = c.currentDest2.mod
+      writeNode.endTime = c.worker.ddg.nextTimestamp(writeNode)
+    }
+
+    changeable.asInstanceOf[Changeable2[T, U]]
+  }
+
+  def par[T, U](one: Context => T): Parer[T, U] = {
+    new Parer(one)
+  }
+
+  def makeMemoizer[T](dummy: Boolean = false)(implicit c: Context): Memoizer[T] = {
+    c.nextMemoId += 1
+
     if(dummy) {
-      liftId += 1
-      new DummyLift[T](this, liftId)
+      new DummyMemoizer[T](c, c.nextMemoId)
     } else {
-      liftId += 1
-      new Lift[T](this, liftId)
+      new Memoizer[T](c, c.nextMemoId)
+    }
+  }
+
+  def createMod[T](value: T)(implicit c: Context): Mod[T] = {
+    mod {
+      write(value)
     }
   }
 }

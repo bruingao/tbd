@@ -19,51 +19,35 @@ import akka.actor.ActorRef
 import scala.collection.mutable.Set
 import scala.concurrent.Promise
 
-import tbd.{Adjustable, Changeable, TBD}
+import tbd.{Adjustable, AdjustableConf, Changeable, TBD}
 import tbd.Constants._
 import tbd.ddg.Node
 import tbd.mod.{AdjustableList, Mod}
-import tbd.worker.Task
-
-// DDG
-case class AddReadMessage(modId: ModId, parent: Node)
-case class AddWriteMessage(modId: ModId, parent: Node)
-case class ToStringMessage()
 
 // Datastore
-case class CreateTableMessage(table: String)
-case class GetMessage(table: String, key: Any)
-case class PutMessage(table: String, key: Any, value: Any)
-case class UpdateMessage(table: String, key: Any, value: Any)
-case class RemoveMessage(table: String, key: Any)
+case class CreateAdjustableMessage(conf: AdjustableConf)
+case class PutInputMessage(inputId: InputId, key: Any, value: Any)
+case class UpdateInputMessage(inputId: InputId, key: Any, value: Any)
+case class RemoveInputMessage(inputId: InputId, key: Any)
+case class GetInputMessage(inputId: InputId)
 
-case class CleanUpMessage(
-    workerRef: ActorRef,
-    adjustableLists: Set[AdjustableList[Any, Any]])
-
-case class GetModMessage(table: String, key: Any)
-case class GetAdjustableListMessage(
-    table: String,
-    partitions: Int = 8,
-    chunkSize: Int = 0,
-    chunkSizer: Any => Int,
-    valueMod: Boolean)
+case class CreateModMessage()
+case class GetModMessage(modId: ModId, workerRef: ActorRef)
+case class UpdateModMessage(modId: ModId, value: Any)
 case class NullMessage()
 
 // Master
-case class RunMessage(adjust: Adjustable, mutatorId: Int)
-case class PutInputMessage(table: String, key: Any, value: Any)
-case class UpdateInputMessage(table: String, key: Any, value: Any)
-case class RemoveInputMessage(table: String, key: Any)
 case class RegisterMutatorMessage()
+case class RunMessage(adjust: Adjustable[_], mutatorId: Int)
 case class GetMutatorDDGMessage(mutatorId: Int)
 case class ShutdownMutatorMessage(mutatorId: Int)
+case class CleanupMessage()
 
 // Worker
 case class ModUpdatedMessage(modId: ModId, finished: Promise[String])
 case class PebbleMessage(workerRef: ActorRef, modId: ModId, finished: Promise[String])
 case class PropagateMessage()
-case class RunTaskMessage(func: Task)
+case class RunTaskMessage(adjust: Adjustable[_])
 case class GetDDGMessage()
 case class DDGToStringMessage(prefix: String)
 case class CleanupWorkerMessage()

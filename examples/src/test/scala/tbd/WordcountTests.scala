@@ -18,42 +18,64 @@ package tbd.examples.test
 import org.scalatest._
 import scala.collection.immutable.HashMap
 
-import tbd.Mutator
-import tbd.examples.list.WCAdjust
+import tbd.{Adjustable, Context, ListInput, Mutator}
+import tbd.examples.list.WCAlgorithm
 import tbd.mod.Mod
+import tbd.TBD._
+
+class WCTest(input: ListInput[Int, String])
+    extends Adjustable[Mod[(Int, HashMap[String, Int])]] {
+  def mapper(pair: (Int, String)) = {
+    (pair._1, WCAlgorithm.wordcount(pair._2))
+  }
+
+  def reducer(
+      pair1: (Int, HashMap[String, Int]),
+      pair2: (Int, HashMap[String, Int])) = {
+    (pair1._1, WCAlgorithm.reduce(pair1._2, pair2._2))
+   }
+
+  def run(implicit c: Context) = {
+    val pages = input.getAdjustableList()
+    val counts = pages.map(mapper)
+    val initialValue = createMod((0, HashMap[String, Int]()))
+    counts.reduce(initialValue, reducer)
+  }
+}
 
 class WordcountTests extends FlatSpec with Matchers {
   "WCAdjust" should "return the corrent word count" in {
     val mutator = new Mutator()
-    mutator.put(1, "apple boy apple cat cat cat")
-    mutator.put(2, "cat boy boy ear cat dog")
-    mutator.put(3, "ear cat apple")
+    val input = mutator.createList[Int, String]()
+    val test = new WCTest(input)
 
-    val output =
-      mutator.run[Mod[(Int, HashMap[String, Int])]](new WCAdjust(2, 0, false, false))
+    input.put(1, "apple boy apple cat cat cat")
+    input.put(2, "cat boy boy ear cat dog")
+    input.put(3, "ear cat apple")
+
+    val output = mutator.run(test)
     val answer = HashMap[String, Int]("apple" -> 3, "boy" -> 3, "cat" -> 6,
-                                      "dog" -> 1, "ear" -> 2)
+				      "dog" -> 1, "ear" -> 2)
     assert(output.read()._2 == answer)
 
-
-    mutator.update(1, "apple dog dog dog face")
+    input.update(1, "apple dog dog dog face")
     mutator.propagate()
     val answer2 = HashMap[String, Int]("apple" -> 2, "boy" -> 2, "cat" -> 3,
-                                       "dog" -> 4, "ear" -> 2, "face" -> 1)
+				       "dog" -> 4, "ear" -> 2, "face" -> 1)
     assert(output.read()._2 == answer2)
 
-    mutator.put(4, "cat apple")
+    input.put(4, "cat apple")
     mutator.propagate()
     val answer3 = HashMap[String, Int]("apple" -> 3, "boy" -> 2, "cat" -> 4,
-                                       "dog" -> 4, "ear" -> 2, "face" -> 1)
+				       "dog" -> 4, "ear" -> 2, "face" -> 1)
     assert(output.read()._2 == answer3)
 
-    mutator.update(4, "boy dog")
-    mutator.put(5, "girl girl girl apple")
+    input.update(4, "boy dog")
+    input.put(5, "girl girl girl apple")
     mutator.propagate()
     val answer4 = HashMap[String, Int]("apple" -> 3, "boy" -> 3, "cat" -> 3,
-                                       "dog" -> 5, "ear" -> 2, "face" -> 1,
-                                       "girl" -> 3)
+				       "dog" -> 5, "ear" -> 2, "face" -> 1,
+				       "girl" -> 3)
     assert(output.read()._2 == answer4)
 
     mutator.shutdown()

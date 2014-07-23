@@ -23,4 +23,5 @@ object Constants {
   implicit var TIMEOUT = Timeout(DURATION)
 
   type ModId = String
+  type InputId = Int
 }

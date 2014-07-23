@@ -17,90 +17,85 @@ package tbd.mod
 
 import scala.collection.mutable.{ArrayBuffer, Buffer}
 
-import tbd.{Changeable, TBD}
-import tbd.Constants._
-import tbd.memo.Lift
+import tbd.{Changeable, Changeable2, Context, Memoizer}
+import tbd.Constants.ModId
+import tbd.TBD._
 
-class ModList[T, V](
-    aHead: Mod[ModListNode[T, V]])
-    extends AdjustableList[T, V] {
-  val head = aHead
+class ModList[T, U](
+    val head: Mod[ModListNode[T, U]]
+  ) extends AdjustableList[T, U] {
 
-  def map[U, Q](
-      tbd: TBD,
-      f: (TBD, (T, V)) => (U, Q),
-      parallel: Boolean = false,
-      memoized: Boolean = true): ModList[U, Q] = {
-    if (parallel) {
-      new ModList(
-        tbd.mod((dest: Dest[ModListNode[U, Q]]) => {
-          tbd.read(head)(node => {
-            if (node != null) {
-              node.parMap(tbd, dest, f)
-            } else {
-              tbd.write(dest, null)
-            }
-          })
-        })
-      )
-    } else {
-      val lift = tbd.makeLift[Mod[ModListNode[U, Q]]](!memoized)
+  def filter(
+      pred: ((T, U)) => Boolean)
+     (implicit c: Context): ModList[T, U] = {
+    val memo = makeMemoizer[Mod[ModListNode[T, U]]]()
 
-      new ModList(
-        //tbd.mod((dest: Dest[ModListNode[U, Q]]) => {
-          tbd.readMod(head, lift)((dest: Dest[ModListNode[U, Q]], node) => {
-            if (node != null) {
-              node.map(tbd, dest, f, lift)
-            } else {
-              tbd.write(dest, null)
-            }
-          })
-        //})
-      )
-    }
+    new ModList(
+      mod {
+        read(head) {
+	  case null => write[ModListNode[T, U]](null)
+	  case node => node.filter(pred, memo)
+        }
+      }
+    )
+  }
+
+  def map[V, W](
+      f: ((T, U)) => (V, W))
+     (implicit c: Context): ModList[V, W] = {
+    val memo = makeMemoizer[Changeable[ModListNode[V, W]]]()
+
+    new ModList(
+      mod {
+        read(head) {
+          case null => write[ModListNode[V, W]](null)
+          case node => node.map(f, memo)
+        }
+      }
+    )
   }
 
   def reduce(
-      tbd: TBD,
-      identityMod: Mod[(T, V)],
-      f: (TBD, (T, V), (T, V)) => (T, V),
-      parallel: Boolean = false,
-      memoized: Boolean = true): Mod[(T, V)] = {
+      identityMod: Mod[(T, U)],
+      f: ((T, U), (T, U)) => (T, U))
+     (implicit c: Context): Mod[(T, U)] = {
 
-    // Each round we need a hasher and a lift, and we need to guarantee that the
-    // same hasher and lift are used for a given round during change propagation,
-    // even if the first mod of the list is deleted. 
-    class RoundLift {
-      val lift = tbd.makeLift[(Hasher,
-                               Lift[Mod[ModListNode[T, V]]],
-                               RoundLift)](!memoized)
+    // Each round we need a hasher and a memo, and we need to guarantee that the
+    // same hasher and memo are used for a given round during change propagation,
+    // even if the first mod of the list is deleted.
+    class RoundMemoizer {
+      val memo = makeMemoizer[(Hasher,
+                               Memoizer[Mod[ModListNode[T, U]]],
+                               RoundMemoizer)]()
 
       def getTuple() =
-        lift.memo(List(), () =>
-                  (new Hasher(2, 4),
-                   tbd.makeLift[Mod[ModListNode[T, V]]](!memoized),
-                   new RoundLift()))
+        memo() {
+          (new Hasher(2, 4),
+           makeMemoizer[Mod[ModListNode[T, U]]](),
+           new RoundMemoizer())
+	}
     }
 
     def randomReduceList(
-        head: ModListNode[T, V],
-        identity: (T, V),
+        head: ModListNode[T, U],
+        identity: (T, U),
         round: Int,
-        dest: Dest[(T, V)],
-        roundLift: RoundLift): Changeable[(T, V)] = {
-      val tuple = roundLift.getTuple()
+        roundMemoizer: RoundMemoizer): Changeable[(T, U)] = {
+      val tuple = roundMemoizer.getTuple()
 
       val halfListMod =
-        tbd.mod((dest: Dest[ModListNode[T, V]]) =>
-          tbd.read(identityMod)(identity =>
-            halfList(identity, identity, head, round, tuple._1, tuple._2, dest)))
+        mod {
+          read(identityMod) {
+	    case identity => halfList(identity, identity, head, round, tuple._1, tuple._2)
+	  }
+	}
 
-      tbd.read(halfListMod)(halfList =>
-        tbd.read(halfList.next)(next =>
+      read(halfListMod)(halfList =>
+        read(halfList.next)(next =>
           if(next == null)
-            tbd.write(dest, halfList.value)
+            write(halfList.value)
           else
-            randomReduceList(halfList, identity, round + 1, dest, tuple._3)))
+            randomReduceList(halfList, identity, round + 1, tuple._3)))
     }
 
     def binaryHash(id: ModId, round: Int, hasher: Hasher) = {
@@ -108,71 +103,89 @@ class ModList[T, V](
     }
 
     def halfList(
-        acc: (T, V),
-        identity: (T, V),
-        head: ModListNode[T, V],
+        acc: (T, U),
+        identity: (T, U),
+        head: ModListNode[T, U],
         round: Int,
         hasher: Hasher,
-        lift: Lift[Mod[ModListNode[T, V]]],
-        dest: Dest[ModListNode[T, V]])
-          : Changeable[ModListNode[T, V]] = {
-      val newAcc = f(tbd, acc, head.value)
+        memo: Memoizer[Mod[ModListNode[T, U]]]
+      ): Changeable[ModListNode[T, U]] = {
+      val newAcc = f(acc, head.value)
 
       if(binaryHash(head.next.id, round, hasher)) {
-        val newNext = lift.memo(List(head.next, identityMod), () =>
-	  tbd.mod((dest: Dest[ModListNode[T, V]]) =>
-	    tbd.read(head.next)(next =>
+        val newNext = memo(head.next, identityMod) {
+	  mod {
+	    read(head.next)(next =>
 	      if (next == null)
-	        tbd.write(dest, null)
+	        write[ModListNode[T, U]](null)
 	      else
 	          halfList(identity, identity, next, round,
-                           hasher, lift, dest))))
-        tbd.write(dest, new ModListNode(newAcc, newNext))
+                           hasher, memo))
+	  }
+	}
+        write(new ModListNode(newAcc, newNext))
       } else {
-        tbd.read(head.next)(next =>
+        read(head.next)(next =>
 	  if (next == null) {
-	    val newNext = tbd.createMod[ModListNode[T, V]](null)
-            tbd.write(dest, new ModListNode(newAcc, newNext))
+	    val newNext = createMod[ModListNode[T, U]](null)
+            write(new ModListNode(newAcc, newNext))
 	  } else {
-	    halfList(newAcc, identity, next, round, hasher, lift, dest)
+	    halfList(newAcc, identity, next, round, hasher, memo)
 	  }
         )
       }
     }
 
-    val roundLift = new RoundLift()
-    tbd.mod((dest: Dest[(T, V)]) =>
-      tbd.read(identityMod)(identity =>
-        tbd.read(head)(head =>
+    val roundMemoizer = new RoundMemoizer()
+    mod {
+      read(identityMod)(identity =>
+        read(head)(head =>
           if(head == null)
-            tbd.read(identityMod)(identity =>
-              tbd.write(dest, identity))
+            read(identityMod)(identity =>
+              write(identity))
           else
-            randomReduceList(head, identity, 0, dest, roundLift))))
+            randomReduceList(head, identity, 0, roundMemoizer)))
+    }
   }
 
-  def filter(
-      tbd: TBD,
-      pred: ((T, V)) => Boolean,
-      parallel: Boolean = false,
-      memoized: Boolean = true): ModList[T, V] = ???/*{
-    val lift = tbd.makeLift[Mod[ModListNode[T, V]]](!memoized)
+  def sort(
+      comparator: ((T, U), (T, U)) => Boolean)
+     (implicit c: Context): AdjustableList[T, U] = {
+    val memo = makeMemoizer[Mod[ModListNode[T, U]]]()
 
-    new ModList(
-      tbd.mod((dest: Dest[ModListNode[T, V]]) => {
-        tbd.read(head)(node => {
-          if (node != null) {
-            node.filter(tbd, dest, pred, lift)
-          } else {
-            tbd.write(dest, null)
-          }
-        })
-      })
-    )
-  }*/
+    val sorted = mod {
+      read(head) {
+        case null => write[ModListNode[T, U]](null)
+        case node =>
+	  node.sort(createMod(null), comparator, memo)
+      }
+    }
 
-  def toBuffer(): Buffer[V] = {
-    val buf = ArrayBuffer[V]()
+    new ModList(sorted)
+  }
+
+  def split(
+      pred: ((T, U)) => Boolean)
+     (implicit c: Context): (AdjustableList[T, U], AdjustableList[T, U]) = {
+    val memo = makeMemoizer[Changeable2[ModListNode[T, U], ModListNode[T, U]]]()
+
+    val result = mod2(2) {
+      read(head) {
+	case null =>
+	  write2(null.asInstanceOf[ModListNode[T, U]],
+		 null.asInstanceOf[ModListNode[T, U]])
+	case node => 
+	  memo(node) {
+	    node.split(memo, pred)
+	  }
+      }
+    }
+
+    (new ModList(result._1), new ModList(result._2))
+  }
+
+  def toBuffer(): Buffer[U] = {
+    val buf = ArrayBuffer[U]()
     var node = head.read()
     while (node != null) {
       buf += node.value._2

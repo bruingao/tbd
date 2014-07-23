@@ -13,26 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd.datastore
+package tbd
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Future
+import akka.actor.ActorRef
+import akka.pattern.ask
+import scala.concurrent.Await
 
-class ModModifier[T, U](_datastore: Datastore, _key: T, value: U)
-    extends Modifier[T, U](_datastore) {
-  val mod = datastore.createMod(value)
+import tbd.Constants._
+import tbd.messages._
+import tbd.mod.ModTable
 
-  def insert(key: T, value: U): ArrayBuffer[Future[String]] = ???
-
-  def update(key: T, value: U): ArrayBuffer[Future[String]] = {
-    if (key == _key) {
-      datastore.updateMod(mod.id, value)
-    } else {
-      ArrayBuffer[Future[String]]()
-    }
+class TableInput[T, U](masterRef: ActorRef, conf: TableConf)
+    extends Input[T, U](masterRef, conf) {
+  def getTable(): ModTable[T, U] = {
+    val future = masterRef ? GetInputMessage(inputId)
+    Await.result(future.mapTo[ModTable[T, U]], DURATION)
   }
-
-  def remove(key: T): ArrayBuffer[Future[String]] = ???
-
-  def getModifiable(): Any = mod
 }

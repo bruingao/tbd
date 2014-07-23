@@ -18,41 +18,48 @@ package tbd.test
 import org.scalatest._
 import scala.collection.mutable.ArrayBuffer
 
-import tbd.{Adjustable, Changeable, Mutator, TBD}
-import tbd.mod.{Dest, Mod, AdjustableList}
+import tbd.{Adjustable, Changeable, Context, ListConf, ListInput, Memoizer, Mutator, TableInput}
+import tbd.mod.{AdjustableList, Mod}
+import tbd.TBD._
 
-class PropagationOrderTest extends Adjustable {
+class PropagationOrderTest(input: TableInput[Int, Int])
+    extends Adjustable[Mod[Int]] {
   var num = 0
 
-  def run(tbd: TBD): Mod[Int] = {
-    val one = tbd.input.getMod[Int](1)
+  def run(implicit c: Context) = {
+    val table = input.getTable()
+    val one = table.get(1)
 
-    tbd.mod((dest: Dest[Int]) => {
-      tbd.read(one)(v1 => {
-        assert(num == 0)
-        num += 1
-        tbd.read(one)(v2 => {
-          assert(num == 1)
+    mod {
+      read(one) {
+	case v1 =>
+          assert(num == 0)
           num += 1
-          tbd.write(dest, v2)
-        })
-      })
+          read(one) {
+	    case v2 =>
+              assert(num == 1)
+              num += 1
+              write(v2)
+          }
+      }
 
-      tbd.read(one)(v3 => {
-        assert(num == 2)
-        tbd.write(dest, v3)
-      })
-    })
+      read(one) {
+	  case v3 =>
+          assert(num == 2)
+          write(v3)
+      }
+    }
   }
 }
 
-class PropagationOrderTest2 extends Adjustable {
+class PropagationOrderTest2(input: ListInput[Int, Int])
+    extends Adjustable[AdjustableList[Int, Int]] {
   val values = ArrayBuffer[Int]()
 
-  def run(tbd: TBD): AdjustableList[Int, Int] = {
-    val adjustableList = tbd.input.getAdjustableList[Int, Int](partitions = 1)
-    adjustableList.map(tbd, (tbd: TBD, pair: (Int, Int)) => {
-      if (tbd.initialRun) {
+  def run(implicit c: Context) = {
+    val adjustableList = input.getAdjustableList()
+    adjustableList.map((pair: (Int, Int)) => {
+      if (c.initialRun) {
         values += pair._2
       } else {
         assert(pair._2 == values.head + 1)
@@ -63,57 +70,132 @@ class PropagationOrderTest2 extends Adjustable {
   }
 }
 
-class ReduceTest extends Adjustable {
-  def run(tbd: TBD): Mod[(Int, Int)] = {
-    val list = tbd.input.getAdjustableList[Int, Int](partitions = 1)
-    val zero = tbd.createMod((0, 0))
-    list.reduce(tbd, zero, (tbd: TBD, pair1: (Int, Int), pair2: (Int, Int)) => {
+class ReduceTest(input: ListInput[Int, Int])
+    extends Adjustable[Mod[(Int, Int)]] {
+  def run(implicit c: Context) = {
+    val list = input.getAdjustableList()
+    val zero = createMod((0, 0))
+    list.reduce(zero, (pair1: (Int, Int), pair2: (Int, Int)) => {
       //println("reducing " + pair1._2 + " " + pair2._2)
       (pair1._1, pair1._2 + pair2._2)
     })
   }
 }
 
-class ParTest extends Adjustable {
-  def run(tbd: TBD): Mod[Int] = {
-    val one = tbd.input.getMod[Int](1)
+class ParTest(input: TableInput[Int, Int]) extends Adjustable[Mod[Int]] {
+  def run(implicit c: Context) = {
+    val table = input.getTable()
+    val one = table.get(1)
 
-    val pair = tbd.par((tbd: TBD) =>
-      tbd.mod((dest: Dest[Int]) =>
-        tbd.read(one)(oneValue =>
-          tbd.write(dest, oneValue + 1))),
-      (tbd: TBD) => 0)
+    val pair = par {
+      c =>
+	mod {
+          read(one) {
+            case oneValue => write(oneValue + 1)(c)
+	  } (c)
+	} (c)
+    } and {
+      c => 0
+    }
 
-    tbd.mod((dest: Dest[Int]) =>
-      tbd.read(pair._1)(value =>
-        tbd.write(dest, value * 2)))
+    mod {
+      read(pair._1) {
+	case value => write(value * 2)
+      }
+    }
+  }
+}
+
+// Checks that modNoDest returns the correct values even after a convuloted
+// series of memo matches.
+class ModNoDestTest(input: TableInput[Int, Int])
+    extends Adjustable[Mod[Int]] {
+  val table = input.getTable()
+  val one = table.get(1)
+  val two = table.get(2)
+  val three = table.get(3)
+  val four = table.get(4)
+  val five = table.get(5)
+  val six = table.get(6)
+  val seven = table.get(7)
+
+  // If four == 4, twoMemo returns 6, otherwise it returns sevenValue.
+  def twoMemo(memo: Memoizer[Changeable[Int]])(implicit c: Context) = {
+    read(four)(fourValue => {
+      if (fourValue == 4) {
+	mod {
+	  memo(five) {
+	    read(seven)(sevenValue => {
+	      write(sevenValue)
+	    })
+	  }
+	}
+
+	memo(six) {
+	  write(6)
+	}
+      } else {
+	memo(five) {
+	  read(seven)(sevenValue => {
+	    write(sevenValue)
+	  })
+	}
+      }
+    })
+  }
+
+  def run(implicit c: Context) = {
+    val memo = makeMemoizer[Changeable[Int]]()
+
+    mod {
+      read(one)(oneValue => {
+	if (oneValue == 1) {
+	  val mod1 = mod {
+	    memo(two) {
+	      twoMemo(memo)
+	    }
+	  }
+
+	  read(mod1)(value1 => {
+	    write(value1)
+	  })
+	} else {
+	  memo(two) {
+	    twoMemo(memo)
+	  }
+	}
+      })
+    }
   }
 }
 
 class ChangePropagationTests extends FlatSpec with Matchers {
   "PropagationOrderTest" should "reexecute reads in the correct order" in {
     val mutator = new Mutator()
-    mutator.put(1, 1)
-    val test = new PropagationOrderTest()
-    val output = mutator.run[Mod[Int]](test)
+    val input = mutator.createTable[Int, Int]()
+    input.put(1, 1)
+    val test = new PropagationOrderTest(input)
+    val output = mutator.run(test)
     test.num should be (2)
 
     test.num = 0
-    mutator.update(1, 2)
+    input.update(1, 2)
     mutator.propagate()
     test.num should be (2)
   }
 
   "PropagationOrderTest2" should "reexecute map in the correct order" in {
     val mutator = new Mutator()
-    for (i <- 0 to 100) {
-      mutator.put(i, i)
-    }
-    val test = new PropagationOrderTest2()
-    mutator.run[AdjustableList[Int, String]](test)
+    val input = mutator.createList[Int, Int](new ListConf(partitions = 1))
 
     for (i <- 0 to 100) {
-      mutator.update(i, i + 1)
+      input.put(i, i)
+    }
+    val test = new PropagationOrderTest2(input)
+    mutator.run(test)
+
+    for (i <- 0 to 100) {
+      input.update(i, i + 1)
     }
 
     mutator.propagate()
@@ -123,33 +205,60 @@ class ChangePropagationTests extends FlatSpec with Matchers {
 
   "ReduceTest" should "reexecute only the necessary reduce steps" in {
     val mutator = new Mutator()
+    val input = mutator.createList[Int, Int](new ListConf(partitions = 1))
     for (i <- 1 to 16) {
-      mutator.put(i, i)
+      input.put(i, i)
     }
-    val test = new ReduceTest()
-    val output = mutator.run[Mod[(Int, Int)]](test)
+    val test = new ReduceTest(input)
+    val output = mutator.run(test)
 
     output.read()._2 should be (136)
-    //println(mutator.getDDG())
 
-    mutator.remove(16)
-    mutator.remove(7)
-    //println(mutator.getDDG())
+    input.remove(16)
+    input.remove(7)
     mutator.propagate()
-    //println(mutator.getDDG())
 
     output.read()._2 should be (113)
   }
 
   "ParTest" should "do something" in {
     val mutator = new Mutator()
-    mutator.put(1, 1)
-    val output = mutator.run[Mod[Int]](new ParTest())
+    val input = mutator.createTable[Int, Int]()
+    input.put(1, 1)
+    val output = mutator.run(new ParTest(input))
     output.read() should be (4)
 
-    mutator.update(1, 2)
+    input.update(1, 2)
     mutator.propagate()
 
     output.read() should be (6)
+
+    mutator.shutdown()
+  }
+
+  "ModNoDestTest" should "update the dests for the memo matches" in {
+    val mutator = new Mutator()
+    val input = mutator.createTable[Int, Int]()
+    input.put(1, 1)
+    input.put(2, 2)
+    input.put(3, 3)
+    input.put(4, 4)
+    input.put(5, 5)
+    input.put(6, 6)
+    input.put(7, 7)
+    val output = mutator.run(new ModNoDestTest(input))
+    output.read() should be (6)
+
+    input.update(1, 2)
+    input.update(4, 5)
+    mutator.propagate()
+    output.read() should be (7)
+
+    input.update(1, 1)
+    input.update(7, 8)
+    mutator.propagate()
+    output.read() should be (8)
+
+    mutator.shutdown()
   }
 }

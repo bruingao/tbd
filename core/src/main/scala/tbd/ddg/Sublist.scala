@@ -15,9 +15,7 @@
  */
 package tbd.ddg
 
-class Sublist(aId: Int, aNext: Sublist) {
-  var id = aId
-  var next = aNext
+class Sublist(var id: Int, var next: Sublist) {
   var previous: Sublist = null
 
   var base: Timestamp = new Timestamp(this, 0, null)

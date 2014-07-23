@@ -26,9 +26,7 @@ import tbd.master.Main
 import tbd.messages._
 import tbd.mod.{Dest, Mod}
 
-abstract class Node(_parent: Node, _timestamp: Timestamp) {
-  var parent = _parent
-  val timestamp: Timestamp = _timestamp
+abstract class Node(var parent: Node, val timestamp: Timestamp) {
   var endTime: Timestamp = null
   var stacktrace =
     if (Main.debug)
@@ -44,6 +42,10 @@ abstract class Node(_parent: Node, _timestamp: Timestamp) {
   // This is increased above the current epoch whenever the node is matched, so
   // that it won't be matched again in this round of change propagation.
   var matchableInEpoch = 0
+
+  var currentDest: Dest[Any] = null
+
+  var currentDest2: Dest[Any] = null
 
   def addChild(child: Node) {
     children += child
@@ -73,13 +75,11 @@ abstract class Node(_parent: Node, _timestamp: Timestamp) {
 }
 
 class ReadNode(
-    _mod: Mod[Any],
+    val mod: Mod[Any],
     _parent: Node,
     _timestamp: Timestamp,
-    _reader: Any => Changeable[Any])
+    val reader: Any => Changeable[Any])
       extends Node(_parent, _timestamp) {
-  val mod: Mod[Any] = _mod
-  val reader = _reader
 
   override def toString(prefix: String) = {
     prefix + this + " modId=(" + mod.id + ") " + " time=" + timestamp + " to " + endTime +
@@ -87,25 +87,9 @@ class ReadNode(
   }
 }
 
-class ReadModNode(
-    _mod: Mod[Any],
-    _parent: Node,
-    _timestamp: Timestamp,
-    _modReader: (Dest[Any], Any) => Changeable[Any])
-      extends ReadNode(_mod, _parent, _timestamp, null) {
-  val modReader = _modReader
-  var dest: Dest[Any] = null
-  var memoId = 0
-
-  /*override def toString(prefix: String) = {
-    prefix + this + " modId=(" + mod.id + ") " + " time=" + timestamp + " to " + endTime +
-      " value=" + mod + " updated=(" + updated + ")" + super.toString(prefix)
-  }*/
-}
-
-class WriteNode(_mod: Mod[Any], _parent: Node, _timestamp: Timestamp)
+class WriteNode(val mod: Mod[Any], _parent: Node, _timestamp: Timestamp)
     extends Node(_parent, _timestamp) {
-  val mod: Mod[Any] = _mod
+  var mod2: Mod[Any] = null
 
   override def toString(prefix: String) = {
     prefix + "WriteNode modId=(" + mod.id + ") " +
@@ -114,12 +98,10 @@ class WriteNode(_mod: Mod[Any], _parent: Node, _timestamp: Timestamp)
 }
 
 class ParNode(
-    _workerRef1: ActorRef,
-    _workerRef2: ActorRef,
+    val workerRef1: ActorRef,
+    val workerRef2: ActorRef,
     _parent: Node,
     _timestamp: Timestamp) extends Node(_parent, _timestamp) {
-  val workerRef1 = _workerRef1
-  val workerRef2 = _workerRef2
 
   var pebble1 = false
   var pebble2 = false
@@ -139,8 +121,8 @@ class ParNode(
 class MemoNode(
     _parent: Node,
     _timestamp: Timestamp,
-    _signature: List[Any]) extends Node(_parent, _timestamp) {
-  val signature = _signature
+    val signature: Seq[Any]) extends Node(_parent, _timestamp) {
+  var value: Any = null
 
   override def toString(prefix: String) = {
     prefix + "MemoNode time=" + timestamp + " to " + endTime + " signature=" + signature +

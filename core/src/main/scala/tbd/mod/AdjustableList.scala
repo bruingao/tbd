@@ -18,7 +18,7 @@ package tbd.mod
 import akka.actor.ActorRef
 import scala.collection.mutable.{Buffer, Set}
 
-import tbd.TBD
+import tbd.Context
 import tbd.datastore.Datastore
 
 /**
@@ -28,41 +28,48 @@ import tbd.datastore.Datastore
  *
  * The functions of this class are various list operations, implemented in an
  * self-adjustabling way, so they can be called by an Adjustable.
- *
- * The 'parallel' and 'memo' parameters to these functions are performance hints
- * and may be ignored by some subclasses.
  */
 trait AdjustableList[T, U] {
-  /**
-   * Returns a AdjustableList containing the results of applying the given
-   * function to each of the elements of this AdjustableList.
-   */
-  def map[V, Q](
-      tbd: TBD,
-      f: (TBD, (T, U)) => (V, Q),
-      parallel: Boolean = false,
-      memoized: Boolean = true): AdjustableList[V, Q]
-
   /**
    * Returns a AdjustableList containing all of the elements from this
    * AdjustableList that satisfy the given predicate.
    */
   def filter(
-      tbd: TBD,
-      pred: ((T, U)) => Boolean,
-      parallel: Boolean = false,
-      memoized: Boolean = true): AdjustableList[T, U]
+      pred: ((T, U)) => Boolean)
+     (implicit c: Context): AdjustableList[T, U]
+
+  /**
+   * Returns a AdjustableList containing the results of applying the given
+   * function to each of the elements of this AdjustableList.
+   */
+  def map[V, Q](
+      f: ((T, U)) => (V, Q))
+     (implicit c: Context): AdjustableList[V, Q]
 
   /**
    * Reduces all elements in the list using f, in an unspecified order,
    * starting with initialValue
    */
   def reduce(
-      tbd: TBD,
       initialValueMod: Mod[(T, U)],
-      f: (TBD, (T, U), (T, U)) => (T, U),
-      parallel: Boolean = false,
-      memoized: Boolean = true) : Mod[(T, U)]
+      f: ((T, U), (T, U)) => (T, U))
+     (implicit c: Context): Mod[(T, U)]
+
+  /**
+   * Returns a sorted copy of this list.
+   */
+  def sort(
+      comparator: ((T, U), (T, U)) => Boolean)
+     (implicit c: Context): AdjustableList[T, U]
+
+  /**
+   * Returns a tuple of two AdjustableList, whereas the first AdjustableList
+   * containins all of the elements from this AdjustableList that satisfy the
+   * given predicate, and the second AdjustableList contains all other elements.
+   */
+  def split(
+      pred: ((T, U)) => Boolean)
+     (implicit c: Context): (AdjustableList[T, U], AdjustableList[T, U])
 
   /* Meta functions */
   def toBuffer(): Buffer[U]

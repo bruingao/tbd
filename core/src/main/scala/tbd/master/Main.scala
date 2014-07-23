@@ -16,14 +16,22 @@
 package tbd.master
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
+import scala.concurrent.Await
 import scala.concurrent.duration._
+
+import tbd.Constants._
+import tbd.datastore.Datastore
+import tbd.messages._
 
 object Main {
   val debug = false
 
   var id = 0
+
+  var datastoreRef: ActorRef = null
 
   def main(args: Array[String]) {
     val main = new Main()
@@ -31,14 +39,19 @@ object Main {
   }
 }
 
-class Main {
+class Main(storeType: String = "memory", cacheSize: Int = 10000) {
   val system = ActorSystem("masterSystem" + Main.id,
                            ConfigFactory.load.getConfig("master"))
   Main.id += 1
 
-  val masterRef = system.actorOf(Master.props(), "master")
+  val datastoreRef = system.actorOf(Datastore.props(storeType, cacheSize),
+				    "datastore")
+  Main.datastoreRef = datastoreRef
+
+  val masterRef = system.actorOf(Master.props(datastoreRef), "master")
 
   def shutdown() {
+    Await.result((masterRef ? CleanupMessage), DURATION)
     system.shutdown()
   }
 }

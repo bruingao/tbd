@@ -18,26 +18,33 @@ package tbd.test
 import org.scalatest._
 import scala.collection.mutable.Map
 
-import tbd.{Adjustable, Mutator, TBD}
+import tbd._
 import tbd.mod.AdjustableList
 
-class ListTest(partitions: Int, chunkSize: Int, valueMod: Boolean)
-    extends Adjustable {
-  def run(tbd: TBD): AdjustableList[Int, Int] = {
-    tbd.input.getAdjustableList[Int, Int](partitions, chunkSize, _ => 1, valueMod)
+class ListTest(input: ListInput[Int, Int])
+    extends Adjustable[AdjustableList[Int, Int]] {
+  def run(implicit c: Context) = {
+    input.getAdjustableList()
+  }
+}
+
+class ChunkListTest(input: ChunkListInput[Int, Int])
+    extends Adjustable[AdjustableList[Int, Int]] {
+  def run(implicit c: Context) = {
+    input.getChunkList()
   }
 }
 
 class MutatorTests extends FlatSpec with Matchers {
   val rand = new scala.util.Random()
 
-  def updateValue(mutator: Mutator, answer: Map[Int, Int]) {
+  def updateValue(input: Input[Int, Int], answer: Map[Int, Int]) {
     val index = rand.nextInt(answer.size)
     var i = 0
     for ((key, value) <- answer) {
       if (i == index) {
 	val newValue = rand.nextInt(1000)
-	mutator.update(key, newValue)
+	input.update(key, newValue)
 	answer(key) = newValue
       }
 
@@ -45,89 +52,94 @@ class MutatorTests extends FlatSpec with Matchers {
     }
   }
 
-  def insertValue(mutator: Mutator, answer: Map[Int, Int], i: Int) {
+  def insertValue(input: Input[Int, Int], answer: Map[Int, Int], i: Int) {
     val value = rand.nextInt(1000)
     answer += (i -> value)
-    mutator.put(i, value)
+    input.put(i, value)
   }
 
-  def removeValue(mutator: Mutator, answer: Map[Int, Int]) {
+  def removeValue(input: Input[Int, Int], answer: Map[Int, Int]) {
     val index = rand.nextInt(answer.size)
     var j = 0
     for ((key, value) <- answer) {
       if (j == index) {
-	mutator.remove(key)
+	input.remove(key)
 	answer -= key
       }
       j += 1
     }
   }
 
+  def runTest(
+      mutator: Mutator,
+      adjustable: Adjustable[AdjustableList[Int, Int]],
+      input: Input[Int, Int]) {
+    val answer = Map[Int, Int]()
+
+    var  i  = 0
+    while (i < 100) {
+      answer += (i -> i)
+      input.put(i, i)
+      i += 1
+    }
+
+    val output = mutator.run(adjustable)
+    var sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+    output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+
+    for (j <- 0 to i - 1) {
+      updateValue(input, answer)
+      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+    }
+
+    while (i < 200) {
+      insertValue(input, answer, i)
+      i += 1
+      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+    }
+
+    for (j <- 0 to 99) {
+      removeValue(input, answer)
+      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+    }
+
+    for (j <- 0 to 99) {
+      rand.nextInt(3) match {
+	case 0 => {
+	  insertValue(input, answer, i)
+	  i += 1
+	}
+	case 1 => {
+	  removeValue(input, answer)
+	}
+	case 2 => {
+	  updateValue(input, answer)
+	}
+      }
+      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
+      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
+    }
+  }
+
   "AdjustableListTests" should "update the AdjustableList correctly" in {
-    for (adjustable <- List(new ListTest(1, 0, true), new ListTest(2, 0, true),
-                            new ListTest(1, 2, true), new ListTest(2, 2, true),
-                            new ListTest(1, 0, false), new ListTest(2, 0, false),
-                            new ListTest(1, 2, false), new ListTest(2, 2, false))) {
-      val mutator = new Mutator()
-      val answer = Map[Int, Int]()
+    for (partitions <- 1 to 2) {
+      for (chunkSize <- 1 to 2) {
+	val mutator = new Mutator()
 
-      var  i  = 0
-      while (i < 100) {
-        answer += (i -> i)
-        mutator.put(i, i)
-        i += 1
+	val conf = new ListConf(partitions = partitions, chunkSize = chunkSize)
+	if (chunkSize == 1) {
+	  val input = mutator.createList[Int, Int](conf)
+	  runTest(mutator, new ListTest(input), input)
+	} else {
+	  val input = mutator.createChunkList[Int, Int](conf)
+	  runTest(mutator, new ChunkListTest(input), input)
+	}
+
+	mutator.shutdown()
       }
-      val output = mutator.run[AdjustableList[Int, Int]](adjustable)
-      var sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-
-      for (j <- 0 to i - 1) {
-        updateValue(mutator, answer)
-        sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-        output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-      }
-
-      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-
-      while (i < 200) {
-        insertValue(mutator, answer, i)
-        i += 1
-      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-      }
-
-      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-
-      for (j <- 0 to 99) {
-        removeValue(mutator, answer)
-        sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-        output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-      }
-
-      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-
-      for (j <- 0 to 99) {
-        rand.nextInt(3) match {
-	  case 0 => {
-	    insertValue(mutator, answer, i)
-	    i += 1
-	  }
-	  case 1 => {
-	    removeValue(mutator, answer)
-	  }
-	  case 2 => {
-	    updateValue(mutator, answer)
-	  }
-        }
-        sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-        output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
-      }
-
-      sortedAnswer = answer.values.toBuffer.sortWith(_ < _)
-      output.toBuffer().sortWith(_ < _) should be (sortedAnswer)
     }
   }
 }

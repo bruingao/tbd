@@ -17,167 +17,88 @@ package tbd.mod
 
 import scala.collection.mutable.Buffer
 
-import tbd.{Changeable, TBD}
-import tbd.Constants._
-import tbd.memo.Lift
+import tbd.{Changeable, Context, Memoizer}
+import tbd.Constants.ModId
+import tbd.TBD._
 
 class ChunkList[T, U](
-    _head: Mod[ChunkListNode[T, U]]) extends AdjustableList[T, U] {
-  val head = _head
+    val head: Mod[ChunkListNode[T, U]]) extends AdjustableChunkList[T, U] {
 
-  def map[V, Q](
-      tbd: TBD,
-      f: (TBD, (T, U)) => (V, Q),
-      parallel: Boolean = false,
-      memoized: Boolean = true): ChunkList[V, Q] = ??? /*{
-    if (parallel) {
-      new ChunkList(
-        tbd.mod((dest: Dest[ChunkListNode[V, Q]]) => {
-          tbd.read(head)(node => {
-            if (node != null) {
-              node.parMap(tbd, dest, f)
-            } else {
-              tbd.write(dest, null)
-            }
-          })
-        })
-      )
-    } else {
-      val lift = tbd.makeLift[Mod[ChunkListNode[V, Q]]](!memoized)
-      new ChunkList(
-        tbd.mod((dest: Dest[ChunkListNode[V, Q]]) => {
-          tbd.read(head)(node => {
-            if (node != null) {
-              node.map(tbd, dest, f, lift)
-            } else {
-              tbd.write(dest, null)
-            }
-          })
-        })
-      )
-    }
-  }*/
+  def map[V, W](
+      f: ((T, U)) => (V, W))
+     (implicit c: Context): ChunkList[V, W] = {
+    val memo = makeMemoizer[Changeable[ChunkListNode[V, W]]]()
+    new ChunkList(
+      mod {
+        read(head) {
+	  case null => write[ChunkListNode[V, W]](null)
+	  case node => node.map(f, memo)
+        }
+      }
+    )
+  }
+
+  def chunkMap[V, Q](
+      f: (Vector[(T, U)]) => (V, Q))
+     (implicit c: Context): ModList[V, Q] = {
+    val memo = makeMemoizer[Mod[ModListNode[V, Q]]]()
+    new ModList(
+      mod {
+        read(head) {
+	  case null => write[ModListNode[V, Q]](null)
+	  case node => node.chunkMap(f, memo)
+        }
+      }
+    )
+  }
 
   def filter(
-      tbd: TBD,
-      pred: ((T, U)) => Boolean,
-      parallel: Boolean = false,
-      memoized: Boolean = true): ChunkList[T, U] = ???
-
-  def randomReduce(
-      tbd: TBD,
-      initialValueMod: Mod[(T, U)],
-      f: (TBD, (T, U), (T, U)) => (T, U),
-      parallel: Boolean,
-      memoized: Boolean): Mod[(T, U)] = ??? /*{
-    val zero = 0
-    val halfLift = tbd.makeLift[Mod[ChunkListNode[T, U]]](!memoized)
-
-    val identityMod = tbd.mod((dest: Dest[Vector[(T, U)]]) => {
-      tbd.read(initialValueMod)(initialValue => {
-	tbd.write(dest, Vector(initialValue))
-      })
-    })
-
-    tbd.mod((dest: Dest[(T, U)]) => {
-      tbd.read(head)(h => {
-        if(h == null) {
-          tbd.read(initialValueMod)(initialValue =>
-            tbd.write(dest, initialValue))
-        } else {
-          randomReduceList(tbd, identityMod,
-                           h, head, zero, dest,
-                           halfLift, f)
-        }
-      })
-    })
-  }
-
-  val hasher = new Hasher(2, 8)
-  def randomReduceList(
-      tbd: TBD,
-      identityMod: Mod[Vector[(T, U)]],
-      head: ChunkListNode[T, U],
-      headMod: Mod[ChunkListNode[T, U]],
-      round: Int,
-      dest: Dest[(T, U)],
-      lift: Lift[Mod[ChunkListNode[T, U]]],
-      f: (TBD, (T, U), (T, U)) => (T, U)): Changeable[(T, U)] = {
-    val halfListMod =
-        tbd.mod((dest: Dest[ChunkListNode[T, U]]) => {
-          halfList(tbd, identityMod, identityMod,
-                   head, round, new Hasher(2, 8),
-                   lift, dest, f)
-      })
-
-    tbd.read(halfListMod)(halfList => {
-      tbd.read(halfList.nextMod)(next => {
-        if(next == null) {
-          tbd.read(halfList.chunkMod)(chunk =>
-            tbd.write(dest, chunk.reduce(f(tbd, _, _))))
-        } else {
-            randomReduceList(tbd, identityMod, halfList, halfListMod,
-                             round + 1, dest,
-                             lift, f)
-        }
-      })
-    })
-  }
-
-  def binaryHash(id: ModId, round: Int, hasher: Hasher) = {
-    hasher.hash(id.hashCode() ^ round) == 0
-  }
-
-  def halfList(
-      tbd: TBD,
-      identityMod: Mod[Vector[(T, U)]],
-      acc: Mod[Vector[(T, U)]],
-      head: ChunkListNode[T, U],
-      round: Int,
-      hasher: Hasher,
-      lift: Lift[Mod[ChunkListNode[T, U]]],
-      dest: Dest[ChunkListNode[T, U]],
-      f: (TBD, (T, U), (T, U)) => (T, U)): Changeable[ChunkListNode[T, U]] = {
-    val newAcc = tbd.mod((dest: Dest[Vector[(T, U)]]) =>
-      tbd.read(acc)((acc) =>
-	tbd.read(head.chunkMod)(chunk =>
-	  if (chunk.size > 0)
-            tbd.write(dest, Vector(f(tbd, acc(0), chunk.reduce(f(tbd, _, _)))))
-	  else
-	    tbd.write(dest, Vector(acc(0)))
-	)))
-
-    if(binaryHash(head.chunkMod.id, round, hasher)) {
-      val newNext =
-	tbd.mod((dest: Dest[ChunkListNode[T, U]]) =>
-	  tbd.read(head.nextMod)(next =>
-	    if (next == null)
-	      tbd.write(dest, null)
-	    else
-	      halfList(tbd, identityMod, identityMod,
-		       next, round, hasher, lift, dest, f)))
-      tbd.write(dest, new ChunkListNode(newAcc, newNext))
-    } else {
-      tbd.read(head.nextMod)(next => {
-	if (next == null) {
-	  val newNext = tbd.createMod[ChunkListNode[T, U]](null)
-          tbd.write(dest, new ChunkListNode(newAcc, newNext))
-	} else {
-	  halfList(tbd, identityMod, newAcc,
-		   next, round, hasher, lift, dest, f)
-	}
-      })
-    }
-  }*/
+      pred: ((T, U)) => Boolean)
+     (implicit c: Context): ChunkList[T, U] = ???
 
   def reduce(
-      tbd: TBD,
       initialValueMod: Mod[(T, U)],
-      f: (TBD, (T, U), (T, U)) => (T, U),
-      parallel: Boolean = false,
-      memoized: Boolean = true): Mod[(T, U)] = ??? /* {
-    randomReduce(tbd, initialValueMod, f, parallel, memoized)
-  }*/
+      f: ((T, U), (T, U)) => (T, U))
+     (implicit c: Context): Mod[(T, U)] = ???
+
+  def split(
+      pred: ((T, U)) => Boolean)
+     (implicit c: Context): (AdjustableList[T, U], AdjustableList[T, U]) = ???
+
+  def sort(
+      comparator: ((T, U), (T, U)) => Boolean)
+     (implicit c: Context): AdjustableList[T, U] = ???
+
+  def chunkSort(
+      comparator: ((T, U), (T, U)) => Boolean)
+     (implicit c: Context): Mod[(Int, Vector[(T, U)])] = {
+    def mapper(chunk: Vector[(T, U)]): (Int, Vector[(T, U)]) = {
+      (0, chunk.sortWith((pair1: (T, U), pair2: (T, U)) => {
+	comparator(pair1, pair2)
+      }))
+    }
+    val sortedChunks = chunkMap(mapper)
+
+    def reducer(pair1: (Int, Vector[(T, U)]), pair2: (Int, Vector[(T, U)])) = {
+      def innerReducer(v1: Vector[(T, U)], v2: Vector[(T, U)]): Vector[(T, U)] = {
+	if (v1.size == 0) {
+	  v2
+	} else if (v2.size == 0) {
+	  v1
+	} else {
+	  if (comparator(v1.head, v2.head)) {
+	    v1.head +: innerReducer(v1.tail, v2)
+	  } else {
+	    v2.head +: innerReducer(v1, v2.tail)
+	  }
+	}
+      }
+      (pair1._1, innerReducer(pair1._2, pair2._2))
+    }
+
+    val initialValue = createMod((0, Vector[(T, U)]()))
+    sortedChunks.reduce(initialValue, reducer)
+  }
 
   /* Meta functions */
   def toBuffer(): Buffer[U] = {

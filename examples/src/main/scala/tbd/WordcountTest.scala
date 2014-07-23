@@ -3,7 +3,7 @@ package tbd.examples
 import scalaz._
 import Scalaz._
 
-object Speedtest {
+class WordcountTest {
   def wordcount1(lines: String) = {
     val counts = scala.collection.mutable.Map[String, Int]()
 
@@ -76,7 +76,7 @@ object Speedtest {
     map
   }
 
-  def main(args: Array[String]) {
+  def main() {
     val source = scala.io.Source.fromFile("input.txt")
     val lines = source.mkString
     source.close()

@@ -19,10 +19,9 @@ import akka.actor.ActorRef
 import akka.event.LoggingAdapter
 import scala.collection.mutable.{Map, MutableList, Set, TreeSet}
 
-import tbd.Changeable
+import tbd.{Changeable, Changeable2}
 import tbd.Constants._
 import tbd.master.Master
-import tbd.memo.MemoEntry
 import tbd.mod.{Dest, Mod}
 import tbd.worker.Worker
 
@@ -52,24 +51,7 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
     readNode
   }
 
-  def addReadMod(
-      mod: Mod[Any],
-      parent: Node,
-      reader: (Dest[Any], Any) => Changeable[Any]): ReadModNode = {
-    val timestamp = nextTimestamp(parent)
-    val readNode = new ReadModNode(mod, parent, timestamp, reader)
-    parent.addChild(readNode)
-
-    if (reads.contains(mod.id)) {
-      reads(mod.id) += readNode.asInstanceOf[ReadNode]
-    } else {
-      reads(mod.id) = Set(readNode.asInstanceOf[ReadNode])
-    }
-
-    readNode
-  }
-
-  def addWrite(mod: Mod[Any], parent: Node): Node = {
+  def addWrite(mod: Mod[Any], parent: Node): WriteNode = {
     val timestamp = nextTimestamp(parent)
     val writeNode = new WriteNode(mod, parent, timestamp)
 
@@ -88,7 +70,7 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
     pars(workerRef2) = parNode
   }
 
-  def addMemo(parent: Node, signature: List[Any]): MemoNode = {
+  def addMemo(parent: Node, signature: Seq[Any]): MemoNode = {
     val timestamp = nextTimestamp(parent)
     val memoNode = new MemoNode(parent, timestamp, signature)
     parent.addChild(memoNode)
@@ -196,10 +178,10 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
     } else if (node.isInstanceOf[MemoNode]) {
       val signature = node.asInstanceOf[MemoNode].signature
 
-      var toRemove: MemoEntry = null
-      for (memoEntry <- worker.memoTable(signature)) {
-        if (toRemove == null && memoEntry.node.timestamp == node.timestamp) {
-          toRemove = memoEntry
+      var toRemove: MemoNode = null
+      for (memoNode <- worker.memoTable(signature)) {
+        if (toRemove == null && memoNode.timestamp == node.timestamp) {
+          toRemove = memoNode
         }
       }
 
@@ -228,6 +210,48 @@ class DDG(log: LoggingAdapter, id: String, worker: Worker) {
 
     parent.addChild(subtree)
     subtree.parent = parent
+  }
+
+  /**
+   * Replaces all of the dests equal to dest1 with dest2 and all mods equal to
+   * dest1.mod with dest2.mod in the subtree rooted at node. This is called when
+   * a memo match is made where the memo node has a dest that's different from
+   * the currentDest.
+   */
+  def replaceDests(node: Node, dest1: Dest[Any], dest2: Dest[Any]) {
+    if (node.isInstanceOf[MemoNode]) {
+      val memoNode = node.asInstanceOf[MemoNode]
+      if (memoNode.value.isInstanceOf[Changeable[_]]) {
+	val changeable = memoNode.value.asInstanceOf[Changeable[Any]]
+	if (changeable.mod == dest1.mod) {
+	  changeable.mod = dest2.mod
+	}
+      }
+
+      if (memoNode.value.isInstanceOf[Changeable2[_, _]]) {
+	val changeable2 = memoNode.value.asInstanceOf[Changeable2[Any, Any]]
+	if (changeable2.mod2 == dest1.mod) {
+	  changeable2.mod2 = dest2.mod
+	}
+      }
+    }
+
+    if (node.currentDest == dest1) {
+      node.currentDest = dest2
+
+      // Because reads and memos must have as their currentDest the modNoDest
+      // that is closest in enclosing scope, a node that doesn't have dest1 as
+      // its dest can't have any children that have dest1 either.
+      for (child <- node.children) {
+	replaceDests(child, dest1, dest2)
+      }
+    } else if(node.currentDest2 == dest1) {
+      node.currentDest2 = dest2
+
+      for (child <- node.children) {
+	replaceDests(child, dest1, dest2)
+      }
+    }
   }
 
   override def toString = {

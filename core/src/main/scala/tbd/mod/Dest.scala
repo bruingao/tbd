@@ -16,19 +16,17 @@
 package tbd.mod
 
 import akka.actor.ActorRef
+import akka.pattern.ask
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, Future}
 
 import tbd.Constants._
 import tbd.TBD
 import tbd.master.Main
+import tbd.messages._
 import tbd.worker.Worker
 
-class Dest[T](_id: ModId)
-    extends Mod[T](new ModId(_id + "d"), null.asInstanceOf[T]) {
-  val mod = new Mod[T](_id, null.asInstanceOf[T])
-
-  override def read(workerRef: ActorRef = null): T = ???
-
-  override def update(value: T, replacedBy: Mod[_]): ArrayBuffer[Future[String]] = ???
+class Dest[T](datastoreRef: ActorRef) {
+  val modFuture = datastoreRef ? CreateModMessage()
+  var mod = Await.result(modFuture.mapTo[Mod[T]], DURATION)
 }

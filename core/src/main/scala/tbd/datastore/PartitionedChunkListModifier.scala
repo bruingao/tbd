@@ -18,55 +18,34 @@ package tbd.datastore
 import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.concurrent.Future
 
+import tbd.ListConf
 import tbd.mod._
 
-class PartitionedChunkListModifier[T, U](
+class PartitionedChunkListModifier(
     _datastore: Datastore,
-    table: Map[Any, Any],
-    numPartitions: Int,
-    chunkSize: Int,
-    chunkSizer: U => Int) extends Modifier[T, U](_datastore) {
+    conf: ListConf) extends Modifier(_datastore) {
 
-  val partitionModifiers = ArrayBuffer[ChunkListModifier[T, U]]()
+  val partitionModifiers = ArrayBuffer[ChunkListModifier]()
   val list = initialize()
 
-  private def initialize(): PartitionedChunkList[T, U] = {
-    val partitions = new ArrayBuffer[ChunkList[T, U]]()
-    var chunkListModifier =
-      new ChunkListModifier[T, U](datastore, Map[Any, Any](), chunkSize, chunkSizer)
-
-    val partitionSize = math.max(1, table.size / numPartitions)
-    var i = 1
-    for (elem <- table) {
-      chunkListModifier.insert(elem._1.asInstanceOf[T],
-			       elem._2.asInstanceOf[U])
-
-      if (i % partitionSize == 0) {
-        partitionModifiers += chunkListModifier
-        partitions += chunkListModifier.list
-        chunkListModifier = new ChunkListModifier[T, U](datastore,
-							Map[Any, Any](),
-							chunkSize,
-							chunkSizer)
-      }
-      i += 1
-    }
-
-    if ((i - 1) % partitionSize != 0) {
+  private def initialize(): PartitionedChunkList[Any, Any] = {
+    val partitions = new ArrayBuffer[ChunkList[Any, Any]]()
+    for (i <- 1 to conf.partitions) {
+      val chunkListModifier = new ChunkListModifier(datastore, conf)
       partitionModifiers += chunkListModifier
       partitions += chunkListModifier.list
     }
 
-    new PartitionedChunkList[T, U](partitions)
+    new PartitionedChunkList[Any, Any](partitions)
   }
 
   private var insertInto = 0
-  def insert(key: T, value: U): ArrayBuffer[Future[String]] = {
-    insertInto = (insertInto + 1) % numPartitions
+  def insert(key: Any, value: Any): ArrayBuffer[Future[String]] = {
+    insertInto = (insertInto + 1) % conf.partitions
     partitionModifiers(insertInto).insert(key, value)
   }
 
-  def update(key: T, value: U): ArrayBuffer[Future[String]] = {
+  def update(key: Any, value: Any): ArrayBuffer[Future[String]] = {
     var futures = ArrayBuffer[Future[String]]()
 
     var found = false
@@ -84,7 +63,7 @@ class PartitionedChunkListModifier[T, U](
     futures
   }
 
-  def remove(key: T): ArrayBuffer[Future[String]] = {
+  def remove(key: Any): ArrayBuffer[Future[String]] = {
     var futures = ArrayBuffer[Future[String]]()
 
     var found = false
@@ -102,6 +81,6 @@ class PartitionedChunkListModifier[T, U](
     futures
   }
 
-  def getModifiable(): AdjustableList[T, U] = list
+  def getModifiable(): AdjustableList[Any, Any] = list
 }
 

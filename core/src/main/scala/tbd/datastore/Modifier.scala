@@ -18,14 +18,13 @@ package tbd.datastore
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
-abstract class Modifier[T, U](aDatastore: Datastore) {
-  val datastore = aDatastore
+abstract class Modifier(val datastore: Datastore) {
 
-  def insert(key: T, value: U): ArrayBuffer[Future[String]]
+  def insert(key: Any, value: Any): ArrayBuffer[Future[String]]
 
-  def update(key: T, value: U): ArrayBuffer[Future[String]]
+  def update(key: Any, value: Any): ArrayBuffer[Future[String]]
 
-  def remove(key: T): ArrayBuffer[Future[String]]
+  def remove(key: Any): ArrayBuffer[Future[String]]
 
   def getModifiable(): Any
 }

@@ -17,51 +17,40 @@ package tbd.mod
 
 import akka.actor.ActorRef
 import akka.pattern.ask
+import java.io.Serializable
 import scala.collection.mutable.{ArrayBuffer, Set}
 import scala.concurrent.{Await, Future, Lock, Promise}
 
 import tbd.Constants._
 import tbd.TBD
+import tbd.master.Main
 import tbd.messages._
 
-class Mod[T](_id: ModId, _value: T) {
-  val id = _id
-  var value = _value
-  val dependencies = Set[ActorRef]()
-  val lock = new Lock()
-  var replacedBy: Mod[_] = null
+class Mod[T](val id: ModId) extends Serializable {
 
   def read(workerRef: ActorRef = null): T = {
-    if (workerRef != null) {
-      lock.acquire()
-      dependencies += workerRef
-      lock.release()
-    }
+    val valueFuture = Main.datastoreRef ? GetModMessage(id, workerRef)
+    val ret = Await.result(valueFuture, DURATION)
 
-    value
+    ret match {
+      case NullMessage => null.asInstanceOf[T]
+      case _ => ret.asInstanceOf[T]
+    }
   }
 
-  def update(_value: T, _replacedBy: Mod[_] = null): ArrayBuffer[Future[String]] = {
-    value = _value
-    replacedBy = _replacedBy
-
-    val futures = ArrayBuffer[Future[String]]()
-    lock.acquire()
-    for (workerRef <- dependencies) {
-      val finished = Promise[String]()
-      workerRef ! ModUpdatedMessage(id, finished)
-      futures += finished.future
-    }
-    lock.release()
-
-    futures
+  def update(_value: T): ArrayBuffer[Future[String]] = {
+    val futuresFuture = Main.datastoreRef ? UpdateModMessage(id, _value)
+    Await.result(futuresFuture.mapTo[ArrayBuffer[Future[String]]], DURATION)
   }
 
-  override def toString = {
-    if (value == null) {
-      "null"
+  override def equals(obj: Any): Boolean = {
+    if (!obj.isInstanceOf[Mod[T]]) {
+      false
     } else {
-      value.toString
+      val that = obj.asInstanceOf[Mod[T]]
+      that.id == id
     }
   }
+
+  override def toString = "Mod(" + id + ")"
 }

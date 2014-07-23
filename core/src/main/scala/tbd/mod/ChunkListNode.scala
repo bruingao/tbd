@@ -15,58 +15,60 @@
  */
 package tbd.mod
 
-import tbd.{Changeable, TBD}
-import tbd.memo.Lift
+import java.io.Serializable
+
+import tbd.{Changeable, Context, Memoizer}
+import tbd.TBD._
 
 // The default value of zero for size works because size is only ever
 // accessed by the Modifier, which will set it appropriately.
 class ChunkListNode[T, U](
-    _chunk: Vector[(T, U)],
-    _nextMod: Mod[ChunkListNode[T, U]],
-    _size: Int = 0) {
-  val chunk = _chunk
-  val nextMod = _nextMod
-  val size = _size
+    val chunk: Vector[(T, U)],
+    val nextMod: Mod[ChunkListNode[T, U]],
+    val size: Int = 0) extends Serializable {
 
-  /*def map[V, Q](
-      tbd: TBD,
-      dest: Dest[ChunkListNode[V, Q]],
-      f: (TBD, (T, U)) => (V, Q),
-      lift: Lift[Mod[ChunkListNode[V, Q]]])
-        : Changeable[ChunkListNode[V, Q]] = {
-    val newChunkMod = tbd.mod((dest: Dest[Vector[(V, Q)]]) =>
-      tbd.read(chunkMod)(chunk =>
-        tbd.write(dest, chunk.map(pair => f(tbd, pair)))))
-    val newNextMod = lift.memo(List(nextMod), () =>
-      tbd.mod((dest: Dest[ChunkListNode[V, Q]]) =>
-        tbd.read(nextMod)(next =>
-          if (next != null)
-            next.map(tbd, dest, f, lift)
-          else
-            tbd.write(dest, null))))
-
-    tbd.write(dest, new ChunkListNode[V, Q](newChunkMod, newNextMod))
+  override def equals(obj: Any): Boolean = {
+    if (!obj.isInstanceOf[ChunkListNode[T, U]]) {
+      false
+    } else {
+      val that = obj.asInstanceOf[ChunkListNode[T, U]]
+      that.chunk == chunk && that.nextMod == nextMod
+    }
   }
 
-  def parMap[V, Q](
-      tbd: TBD,
-      dest: Dest[ChunkListNode[V, Q]],
-      f: (TBD, (T, U)) => (V, Q)): Changeable[ChunkListNode[V, Q]] = {
-    val parTuple = tbd.par(
-      (tbd: TBD) =>
-        tbd.mod((dest: Dest[Vector[(V, Q)]]) =>
-          tbd.read(chunkMod)(chunk =>
-            tbd.write(dest, chunk.map(pair => f(tbd, pair))))),
-      (tbd: TBD) =>
-        tbd.mod((dest: Dest[ChunkListNode[V, Q]]) =>
-          tbd.read(nextMod)(next =>
-            if (next != null)
-              next.parMap(tbd, dest, f)
-            else
-              tbd.write(dest, null))))
+  def chunkMap[V, W](
+      f: (Vector[(T, U)]) => (V, W),
+      memo: Memoizer[Mod[ModListNode[V, W]]])
+     (implicit c: Context): Changeable[ModListNode[V, W]] = {
+    val newNextMod = memo(nextMod) {
+      mod {
+        read(nextMod)(next => {
+          if (next != null && next.chunk.size > 0)
+            next.chunkMap(f, memo)
+          else
+            write[ModListNode[V, W]](null)
+        })
+      }
+    }
 
-    tbd.write(dest, new ChunkListNode[V, Q](parTuple._1, parTuple._2))
-  }*/
+    write(new ModListNode[V, W](f(chunk), newNextMod))
+  }
 
-  def print = "ChunkListNode(" + chunk + ")"
+  def map[V, W](
+      f: ((T, U)) => (V, W),
+      memo: Memoizer[Changeable[ChunkListNode[V, W]]])
+     (implicit c: Context): Changeable[ChunkListNode[V, W]] = {
+    val newChunk = chunk.map(f)
+    val newNext = mod {
+      read(nextMod) {
+	case null => write[ChunkListNode[V, W]](null)
+	case next =>
+          memo(nextMod) {
+            next.map(f, memo)
+          }
+      }
+    }
+
+    write(new ChunkListNode[V, W](newChunk, newNext))
+  }
 }

@@ -13,16 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd.memo
+package tbd
 
-import scala.collection.mutable.ArrayBuffer
+import akka.actor.ActorRef
+import akka.pattern.ask
+import scala.concurrent.Await
 
-import tbd.TBD
-import tbd.mod.Mod
+import tbd.Constants._
+import tbd.messages._
+import tbd.mod.AdjustableChunkList
 
-class DummyLift[T](tbd: TBD, memoId: Int) extends Lift[T](tbd, memoId) {
-
-  override def memo(aArgs: List[Mod[_]], func: () => T): T = {
-    func()
+class ChunkListInput[T, U](masterRef: ActorRef, conf: ListConf)
+    extends Input[T, U](masterRef, conf) {
+  def getChunkList(): AdjustableChunkList[T, U] = {
+    val future = masterRef ? GetInputMessage(inputId)
+    Await.result(future.mapTo[AdjustableChunkList[T, U]], DURATION)
   }
 }

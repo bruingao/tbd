@@ -24,10 +24,7 @@ object Timestamp {
   val MIN_TIMESTAMP = new Timestamp(new Sublist(-1, null), -1, null)
 }
 
-class Timestamp(aSublist: Sublist, aTime: Double, aNext: Timestamp) {
-  var sublist = aSublist
-  var time = aTime
-  var next = aNext
+class Timestamp(var sublist: Sublist, var time: Double, var next: Timestamp) {
   var previous: Timestamp = null
 
   def <(that: Timestamp): Boolean = {

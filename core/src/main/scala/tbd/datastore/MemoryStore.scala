@@ -13,10 +13,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd.worker
+package tbd.datastore
 
-import tbd.{Changeable, TBD}
+import scala.collection.mutable.Map
 
-class Task(aFunc: TBD => Any) {
-  val func = aFunc
+import tbd.Constants._
+
+class MemoryStore extends KVStore {
+  private val values = Map[ModId, Any]()
+
+  def put(key: ModId, value: Any) {
+    values(key) = value
+  }
+
+  def get(key: ModId): Any = {
+    values(key)
+  }
+
+  def remove(key: ModId) {
+    values -= key
+  }
+
+  def contains(key: ModId): Boolean = {
+    values.contains(key)
+  }
+
+  def shutdown() {
+    values.clear()
+  }
 }

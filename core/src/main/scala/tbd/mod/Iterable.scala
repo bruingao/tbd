@@ -15,7 +15,7 @@
  */
 package tbd.mod
 
-import tbd.TBD
+import tbd.Context
 
 /**
  * A simple iterator trait.
@@ -25,5 +25,5 @@ trait Iterable[T, U, N <: Iterator[T, U, N]] {
    * Returns multiple disjoint iterators for the collection, which can be used
    * in parallel. It is guaranteed that at least one iterator is returned.
    */
-  def iterators(tbd: TBD): List[Mod[N]]
+  def iterators(c: Context): List[Mod[N]]
 }
