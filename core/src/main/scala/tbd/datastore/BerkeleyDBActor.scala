@@ -15,7 +15,7 @@
  */
 package tbd.datastore
 
-import akka.actor.Actor
+import akka.actor.{Actor, ActorLogging}
 import com.sleepycat.je.{Environment, EnvironmentConfig}
 import com.sleepycat.persist.{EntityStore, StoreConfig}
 import com.sleepycat.persist.model.{Entity, PrimaryKey, SecondaryKey}
@@ -25,7 +25,7 @@ import java.io._
 import tbd.Constants._
 import tbd.messages._
 
-class BerkeleyDBActor extends Actor {
+class BerkeleyDBActor extends Actor with ActorLogging{
   private var environment: Environment = null
   private var store: EntityStore = null
 
@@ -51,7 +51,12 @@ class BerkeleyDBActor extends Actor {
 
   val pIdx = store.getPrimaryIndex(classOf[ModId], classOf[ModEntity])
 
+  var readCount = 0
+  var writeCount = 0
+  var deleteCount = 0
+
   def put(key: ModId, value: Any) {
+    writeCount += 1
     val entity = new ModEntity()
     entity.key = key
 
@@ -73,6 +78,7 @@ class BerkeleyDBActor extends Actor {
     }
 
     case DBGetMessage(key: ModId) => {
+      readCount += 1
       val byteArray = pIdx.get(key).value
 
       val byteInput = new ByteArrayInputStream(byteArray)
@@ -88,6 +94,7 @@ class BerkeleyDBActor extends Actor {
     }
 
     case DBDeleteMessage(key: ModId) => {
+      deleteCount += 1
       pIdx.delete(key)
     }
 
@@ -96,11 +103,13 @@ class BerkeleyDBActor extends Actor {
     }
 
     case DBShutdownMessage() => {
+      log.info("Shutting down. writes = " + writeCount + ", reads = " +
+	       readCount + ", deletes = " + deleteCount)
       store.close()
       environment.close()
     }
 
-    case x => println("unknown message received by BerkeleyDBActor " + x)
+    case x => log.warning("unknown message received by BerkeleyDBActor " + x)
   }
 }
 

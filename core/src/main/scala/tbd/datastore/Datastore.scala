@@ -36,8 +36,7 @@ class Datastore(storeType: String, cacheSize: Int) extends Actor with ActorLoggi
     if (storeType == "memory") {
       new MemoryStore()
     } else if (storeType == "berkeleydb") {
-      val dbActor = context.actorOf(Props[BerkeleyDBActor])
-      new BerkeleyDBStore(cacheSize, dbActor)
+      new BerkeleyDBStore(cacheSize, context)
     } else {
       println("WARNING: storeType '" + storeType + "' is invalid. Using " +
               "'memory' instead")

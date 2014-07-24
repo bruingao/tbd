@@ -15,7 +15,7 @@
  */
 package tbd.datastore
 
-import akka.actor.ActorRef
+import akka.actor.{ActorRef, ActorContext, Props}
 import akka.pattern.ask
 import scala.collection.mutable.Map
 import scala.concurrent.Await
@@ -31,7 +31,14 @@ class LRUNode(
   var next: LRUNode
 )
 
-class BerkeleyDBStore(cacheSize: Int, dbActor: ActorRef) extends KVStore {
+class BerkeleyDBStore(cacheSize: Int, context: ActorContext) extends KVStore {
+  val numPartitions = 1
+
+  val partitions = Map[Int, ActorRef]()
+  for (i <- 0 until numPartitions) {
+    partitions(i) = context.actorOf(Props[BerkeleyDBActor])
+  }
+
   private val values = Map[ModId, LRUNode]()
   private val tail = new LRUNode(null, null, null, null)
   private var head = tail
@@ -54,9 +61,10 @@ class BerkeleyDBStore(cacheSize: Int, dbActor: ActorRef) extends KVStore {
 
   private def evict() {
     while (values.size > cacheSize) {
-      println("evict")
       val toEvict = tail.previous
-      dbActor ! DBPutMessage(toEvict.key, toEvict.value)
+
+      getPartition(toEvict.key) ! DBPutMessage(toEvict.key, toEvict.value)
+
       values -= toEvict.key
 
       tail.previous = toEvict.previous
@@ -68,7 +76,7 @@ class BerkeleyDBStore(cacheSize: Int, dbActor: ActorRef) extends KVStore {
     if (values.contains(key)) {
       values(key).value
     } else {
-      val future = dbActor ? DBGetMessage(key)
+      val future = getPartition(key) ? DBGetMessage(key)
       Await.result(future, DURATION)
     }
   }
@@ -78,17 +86,23 @@ class BerkeleyDBStore(cacheSize: Int, dbActor: ActorRef) extends KVStore {
       values -= key
     }
 
-    dbActor ! DBDeleteMessage(key)
+    getPartition(key) ! DBDeleteMessage(key)
   }
 
   def contains(key: ModId): Boolean = {
     values.contains(key) || {
-      val future = dbActor ? DBContainsMessage(key)
+      val future = getPartition(key) ? DBContainsMessage(key)
       Await.result(future.mapTo[Boolean], DURATION)
     }
   }
 
   def shutdown() {
-    dbActor ! DBShutdownMessage()
+    for ((num, partition) <- partitions) {
+      partition ! DBShutdownMessage()
+    }
+  }
+
+  private def getPartition(key: ModId): ActorRef = {
+    partitions(key.hashCode % numPartitions)
   }
 }
