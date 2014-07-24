@@ -45,11 +45,17 @@ abstract class Algorithm[Input, Output](_conf: Map[String, _],
   var data: Data[Input] = null.asInstanceOf[Data[Input]]
 
   def naive(): (Long, Long) = {
+    if (Experiment.verbose) {
+      println("Naive load.")
+    }
     val beforeLoad = System.currentTimeMillis()
     data.loadNaive()
     val naiveTable = Vector(data.naiveTable.values.toSeq: _*).par
     val loadElapsed = System.currentTimeMillis() - beforeLoad
 
+    if (Experiment.verbose) {
+      println("Naive run.")
+    }
     val before = System.currentTimeMillis()
     runNaive(naiveTable)
     val elapsed = System.currentTimeMillis() - before
@@ -60,6 +66,9 @@ abstract class Algorithm[Input, Output](_conf: Map[String, _],
   protected def runNaive(table: GenIterable[Input]): Any
 
   def initial(): (Long, Long) = {
+    if (Experiment.verbose) {
+      println("Initial load.")
+    }
     val beforeLoad = System.currentTimeMillis()
     data.loadInitial()
     val loadElapsed = System.currentTimeMillis() - beforeLoad
@@ -68,6 +77,9 @@ abstract class Algorithm[Input, Output](_conf: Map[String, _],
       data.clearValues()
     }
 
+    if (Experiment.verbose) {
+      println("Initial run.")
+    }
     val before = System.currentTimeMillis()
     output = mutator.run[Output](this)
     val elapsed = System.currentTimeMillis() - before
@@ -82,6 +94,10 @@ abstract class Algorithm[Input, Output](_conf: Map[String, _],
   protected def checkOutput(table: Map[Int, Input], output: Output): Boolean
 
   def update(count: Double): (Long, Long) = {
+    if (Experiment.verbose) {
+      println("Updating " + count)
+    }
+
     var i = 0
     val beforeLoad = System.currentTimeMillis()
     while (i < count) {
@@ -90,6 +106,9 @@ abstract class Algorithm[Input, Output](_conf: Map[String, _],
     }
     val loadElapsed = System.currentTimeMillis() - beforeLoad
 
+    if (Experiment.verbose) {
+      println("Running change propagation.")
+    }
     val before = System.currentTimeMillis()
     mutator.propagate()
     val elapsed = System.currentTimeMillis() - before
