@@ -15,6 +15,8 @@
  */
 package tbd.examples.list
 
+import akka.actor.{Actor, ActorSystem, Props}
+import akka.pattern.ask
 import scala.collection.{GenIterable, GenMap, Seq}
 import scala.collection.mutable.{Buffer, Map}
 import scala.concurrent.{Await, Future}
@@ -34,27 +36,51 @@ object MapAlgorithm {
   }
 }
 
+class MapActor(partitions: Int) extends Actor {
+  import context.dispatcher
+
+  var naiveTable = Buffer[GenIterable[String]]()
+
+  def receive = {
+    case table: Map[Int, String] =>
+      var remaining = table.values
+      for (i <- 1 to partitions) {
+	naiveTable += remaining.take(table.size / partitions)
+	remaining = remaining.takeRight(table.size / partitions)
+      }
+
+    case s: String =>
+      val futures = Buffer[Future[GenIterable[Int]]]()
+      for (partition <- naiveTable) {
+	futures += Future {
+	  partition.map(MapAlgorithm.mapper(0, _)._2)
+	}
+      }
+      sender ! Await.result(Future.sequence(futures), DURATION)
+  }
+}
+
 class MapAlgorithm(_conf: Map[String, _], _listConf: ListConf)
     extends Algorithm[String, AdjustableList[Int, Int]](_conf, _listConf) {
   import scala.concurrent.ExecutionContext.Implicits.global
+
+  val system = ActorSystem("mapSystem")
+
+  val mapActor = system.actorOf(Props(classOf[MapActor], partitions), "datastore")
 
   val input = ListInput[Int, String](mutator, listConf)
 
   val data = new StringData(input, count, mutations, Experiment.check)
 
   //var naiveTable: GenIterable[String] = _
-  var naiveTable = Buffer[GenIterable[String]]()
   def generateNaive() {
     data.generate()
-    var remaining = data.table.values
-    for (i <- 1 to partitions) {
-      naiveTable += remaining.take(data.table.size / partitions)
-      remaining = remaining.takeRight(data.table.size / partitions)
-    }
+    mapActor ! data.table
   }
 
   def runNaive() {
-    naiveHelper(naiveTable)
+    Await.result(mapActor ? "run", DURATION)
+    system.shutdown()
   }
 
   private def naiveHelper
