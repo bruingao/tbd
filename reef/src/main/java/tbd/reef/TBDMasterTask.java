@@ -56,6 +56,7 @@ public final class TBDMasterTask implements Task {
     ProcessBuilder pb = new ProcessBuilder(
         "java",
         "-Xmx2g",
+        //"-Xss4m",
         "-Xss128m",
         "-cp", cp,
         "tbd.master.Main",

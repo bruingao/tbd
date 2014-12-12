@@ -29,7 +29,9 @@ import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.AvroConfigurationSerializer;
 import com.microsoft.tang.formats.CommandLine;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -47,6 +49,8 @@ public final class TBDLaunch {
    */
   private static final Logger LOG =
       Logger.getLogger(TBDLaunch.class.getName());
+
+  private static final BufferedReader prompt = new BufferedReader(new InputStreamReader(System.in));
 
   /**
    * This class should not be instantiated.
@@ -144,12 +148,26 @@ public final class TBDLaunch {
    *
    * @return a string that contains last results from all evaluators.
    */
-  public static String run(final Configuration config)
+  public static void run(final Configuration config)
       throws InjectionException {
     final Injector injector = Tang.Factory.getTang().newInjector(config);
     final TBDClient client = injector.getInstance(TBDClient.class);
     client.submit();
-    return client.waitForCompletion();
+    //return client.waitForCompletion();
+
+    String cmd;
+    while (client.isBusy) {
+      try {
+        do {
+          System.out.print("\n");
+          cmd = prompt.readLine();
+        } while (cmd != null && cmd.trim().isEmpty());
+      } catch (final IOException ex) {
+        LOG.log(Level.FINE, "Error reading from stdin: {0}", ex);
+        cmd = null;
+      }
+      client.processCmd(cmd);
+    }
   }
 
   /**
@@ -167,6 +185,7 @@ public final class TBDLaunch {
     } catch (final BindException | InjectionException | IOException ex) {
       LOG.log(Level.SEVERE, "Job configuration error", ex);
     }
+    return;
   }
 
   /**

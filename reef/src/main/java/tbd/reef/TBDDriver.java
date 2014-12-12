@@ -374,8 +374,28 @@ public final class TBDDriver {
   public final class ClientMessageHandler implements EventHandler<byte[]> {
     @Override
     public void onNext(final byte[] message) {
-
+      String cmd = CODEC.decode(message);
+      LOG.log(Level.INFO, "client message: {0}", cmd);
+      
+      if (cmd.equals("workers")) {
+        String msg = "workers (";
+        msg += contexts.size()-1;
+        msg += " in total), ip & port:\n";
+        for (Entry<String, ActiveContext> e : contexts.entrySet()) {
+          String contextId = e.getKey();
+          if (contextId.startsWith("context_worker")) {
+            msg += ctxt2ip.get(contextId);
+            msg += ":";
+            msg += ctxt2port.get(contextId);
+            msg += "\n";
+          }
+        }
+        sendToClient(msg);
+      }
     }
   }
 
+  private void sendToClient(String msg) {
+    this.jobMessageObserver.sendMessageToClient(CODEC.encode(msg));
+  }
 }

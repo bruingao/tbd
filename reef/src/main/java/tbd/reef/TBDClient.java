@@ -27,6 +27,8 @@ import com.microsoft.wake.remote.impl.ObjectSerializableCodec;
 
 import javax.inject.Inject;
 import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -93,12 +95,14 @@ public class TBDClient {
   /**
    * Set to false when job driver is done.
    */
-  private boolean isBusy = true;
+  public boolean isBusy = true;
 
   /**
    * Last result returned from the job driver.
    */
   private String lastResult;
+  
+  private String masterAkka = "unknown";
 
   private final int numWorkers;
   
@@ -120,8 +124,9 @@ public class TBDClient {
     this.numWorkers = numWorkers;
     this.timeout = timeout;
 
-    this.isInteractive = false;
-    this.prompt = null;
+    this.isInteractive = true;
+    this.prompt = this.isInteractive ?
+        new BufferedReader(new InputStreamReader(System.in)) : null;
 
     final JavaConfigurationBuilder configBuilder =
         Tang.Factory.getTang().newConfigurationBuilder();
@@ -147,6 +152,8 @@ public class TBDClient {
                 TBDDriver.StartHandler.class)
             .set(DriverConfiguration.ON_DRIVER_STOP,
                 TBDDriver.StopHandler.class)
+            .set(DriverConfiguration.ON_CLIENT_MESSAGE,
+                TBDDriver.ClientMessageHandler.class)
             .build()
     );
     configBuilder.bindNamedParameter(TBDLaunch.NumWorkers.class,
@@ -184,6 +191,34 @@ public class TBDClient {
     this.reef.submit(this.driverConfiguration);
   }
 
+  public void processCmd(String cmd) {
+    if (cmd.equals("help")){
+      printList();
+    } else if (cmd.equals("exit")) {
+      this.runningJob.close();
+      stopAndNotify();
+    } else if (cmd.equals("master")) {
+      System.out.println(masterAkka);
+    } else if (cmd.equals("workers")) {
+      this.runningJob.send(CODEC.encode(cmd));
+    } else if (cmd.equals("add")) {
+      System.out.println("Not implemented.");
+    } else if (cmd.equals("remove")) {
+      System.out.println("Not implemented.");
+    } else {
+      System.out.println("Illegal command.");
+    }
+  }
+
+  private void printList() {
+    System.out.println("Commands:");
+    System.out.println("master - look up master");
+    System.out.println("workers - look up workers");
+    System.out.println("add - add a worker");
+    System.out.println("remove - remove a worker");
+    System.out.println("exit - terminate system");
+  }
+
   /**
    * Notify the process in waitForCompletion() method that
    * the main process has finished.
@@ -191,7 +226,7 @@ public class TBDClient {
   private synchronized void stopAndNotify() {
     this.runningJob = null;
     this.isBusy = false;
-    this.notify();
+    //this.notify();
   }
 
   /**
@@ -236,8 +271,14 @@ public class TBDClient {
   final class JobMessageHandler implements EventHandler<JobMessage> {
     @Override
     public void onNext(final JobMessage message) {
-      String masterAkka = CODEC.decode(message.get());
-      System.out.println("master Akka:  " + masterAkka);
+      String msg = CODEC.decode(message.get());
+      if (msg.startsWith("akka")) {
+        masterAkka = msg;
+        System.out.println("master Akka:  " + masterAkka);
+        System.out.println("");
+      } else if (msg.startsWith("workers")) {
+        System.out.println(msg);
+      }
     }
   }
 

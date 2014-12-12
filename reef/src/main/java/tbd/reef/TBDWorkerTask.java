@@ -54,9 +54,9 @@ public final class TBDWorkerTask implements Task {
     LOG.log(Level.INFO, "master akka: {0}", masterAkka);
 
     try {
-      Thread.sleep(10000);
+      Thread.sleep(1000);
     } catch (InterruptedException e) {
-      LOG.log(Level.INFO, "worker sleep interrupted 1");
+      LOG.log(Level.INFO, "worker sleep interrupted");
     }
 
     String cp = TBDWorkerTask.class.getProtectionDomain()
@@ -66,6 +66,7 @@ public final class TBDWorkerTask implements Task {
     ProcessBuilder pb = new ProcessBuilder(
         "java",
         "-Xmx2g",
+        //"-Xss4m",
         "-Xss128m",
         "-cp", cp,
         "tbd.worker.Main",
