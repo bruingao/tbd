@@ -280,35 +280,6 @@ public final class TBDDriver {
       } else if (workerCtxt) {
         contexts.put(contextId, context);
         LOG.log(Level.INFO, "Context active: {0}", contextId);
-
-        if (clusterStarted == true) {
-          final String taskId = contextId.replaceFirst("context", "task");
-
-          final JavaConfigurationBuilder cb =
-              Tang.Factory.getTang().newConfigurationBuilder();
-          cb.addConfiguration(
-              TaskConfiguration.CONF
-                  .set(TaskConfiguration.IDENTIFIER, taskId)
-                  .set(TaskConfiguration.TASK, TBDWorkerTask.class)
-                  .build()
-          );
-          cb.bindNamedParameter(TBDDriver.HostIP.class,
-              ctxt2ip.get(contextId));
-          cb.bindNamedParameter(TBDDriver.HostPort.class,
-              ctxt2port.get(contextId).toString());
-          cb.bindNamedParameter(TBDDriver.MasterAkka.class, masterAkka);
-          cb.bindNamedParameter(TBDLaunch.Timeout.class, "" + timeout);
-          cb.bindNamedParameter(WorkerXmx.class, "" + workerXmx);
-          cb.bindNamedParameter(WorkerXss.class, "" + workerXss);
-
-          context.submitTask(cb.build());
-          LOG.log(Level.INFO, "Submit {0} to context {1}",
-              new Object[]{taskId, contextId});
-        }
-        String msg = "new worker: " + ctxt2ip.get(contextId) + ":"
-            + ctxt2port.get(contextId).toString();
-        sendToClient(msg);
-
       } else {
         LOG.log(Level.INFO, "Close context {0} : {1}",
             new Object[]{contextId.split("_")[1], contextId});
@@ -435,34 +406,6 @@ public final class TBDDriver {
           }
         }
         sendToClient(msg);
-      }
-
-      else if (cmd.equals("add")) {
-        synchronized (TBDDriver.this) {
-          numWorkers ++;
-          numEvaluators ++;
-          TBDDriver.this.requestor.submit(EvaluatorRequest.newBuilder()
-              .setNumber(1)
-              .setMemory(3072)
-              //.setMemory(6144)
-              .setNumberOfCores(2)
-              .build());
-        }
-      }
-
-      else if (cmd.equals("remove")) {
-        String contextId = "";
-        synchronized (TBDDriver.this) {
-          contextId = String.format(
-              "context_master_%06d", numEvalAlloced-1);
-          TBDDriver.this.contexts.remove(contextId).close();
-          numWorkers --;
-          numEvaluators --;
-          numEvalAlloced --;
-          numWorkerContexts --;
-        }
-        sendToClient("removed worker: " + ctxt2ip.get(contextId) + ":"
-            + ctxt2port.get(contextId).toString());
       }
 
     }

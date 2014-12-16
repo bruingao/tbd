@@ -208,11 +208,9 @@ public class TBDClient {
     } else if (cmd.equals("workers")) {
       this.runningJob.send(CODEC.encode(cmd));
     } else if (cmd.equals("add")) {
-      this.runningJob.send(CODEC.encode(cmd));
-      //System.out.println("Not implemented.");
+      System.out.println("Not implemented.");
     } else if (cmd.equals("remove")) {
-      this.runningJob.send(CODEC.encode(cmd));
-      //System.out.println("Not implemented.");
+      System.out.println("Not implemented.");
     } else {
       System.out.println("Illegal command.");
     }
@@ -285,8 +283,6 @@ public class TBDClient {
         System.out.println("master Akka:  " + masterAkka);
         System.out.println("");
       } else if (msg.startsWith("workers")) {
-        System.out.println(msg);
-      } else if (msg.startsWith("new worker")) {
         System.out.println(msg);
       }
     }

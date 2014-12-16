@@ -19,6 +19,8 @@ import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.reef.task.Task;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -73,16 +75,23 @@ public final class TBDWorkerTask implements Task {
         .getCodeSource().getLocation().getFile();
     LOG.log(Level.INFO, "cp: {0}", cp);
     
-    ProcessBuilder pb = new ProcessBuilder(
-        "java",
-        xmx,
-        xss,
-        "-cp", cp,
-        "tbd.worker.Main",
-        "-i", hostIP,
-        "-p", hostPort, masterAkka);
+    List<String> args = new ArrayList<String>();
+    args.add("java");
+    if (!xmx.equals("")){
+      args.add(xmx);
+    }
+    args.add(xss);
+    args.add("-cp");
+    args.add(cp);
+    args.add("tbd.worker.Main");
+    args.add("-i");
+    args.add(hostIP);
+    args.add("-p");
+    args.add(hostPort);
+    args.add(masterAkka);
+    ProcessBuilder pb = new ProcessBuilder(args);
 
-    LOG.log(Level.INFO, "pb");
+    LOG.log(Level.INFO, "process initialized");
 
     pb.redirectErrorStream(true);
     pb.inheritIO();
