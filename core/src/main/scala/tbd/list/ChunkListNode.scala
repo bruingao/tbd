@@ -77,7 +77,8 @@ class ChunkListNode[T, U]
 
   def loopJoin[V]
       (that: ChunkList[T, V],
-       memo: Memoizer[Changeable[ChunkListNode[T, (U, V)]]])
+       memo: Memoizer[Changeable[ChunkListNode[T, (U, V)]]],
+       condition: ((T, V), (T, U)) => Boolean)
       (implicit c: Context): Changeable[ChunkListNode[T, (U, V)]] = {
     val newNext = mod {
       read(nextMod) {
@@ -85,7 +86,7 @@ class ChunkListNode[T, U]
 	  write[ChunkListNode[T, (U, V)]](null)
 	case node =>
 	  memo(node) {
-	    node.loopJoin(that, memo)
+	    node.loopJoin(that, memo, condition)
 	  }
       }
     }
@@ -98,12 +99,12 @@ class ChunkListNode[T, U]
 	for (i <- 0 until chunk.size - 1) {
 	  tail = mod {
 	    val memo2 = new Memoizer[Changeable[ChunkListNode[T, (U, V)]]]()
-	    node.joinHelper(chunk(i),  tail, memo2)
+	    node.joinHelper(chunk(i),  tail, memo2, condition)
 	  }
 	}
 
 	val memo2 = new Memoizer[Changeable[ChunkListNode[T, (U, V)]]]()
-	node.joinHelper(chunk(chunk.size - 1), tail, memo2)
+	node.joinHelper(chunk(chunk.size - 1), tail, memo2, condition)
     }
   }
 
@@ -112,11 +113,12 @@ class ChunkListNode[T, U]
   private def joinHelper[V]
       (thatValue: (T, V),
        tail: Mod[ChunkListNode[T, (V, U)]],
-       memo: Memoizer[Changeable[ChunkListNode[T, (V, U)]]])
+       memo: Memoizer[Changeable[ChunkListNode[T, (V, U)]]],
+       condition: ((T, U), (T, V)) => Boolean)
       (implicit c: Context): Changeable[ChunkListNode[T, (V, U)]] = {
     var newChunk = Vector[(T, (V, U))]()
     for (value <- chunk) {
-      if (thatValue._1 == value._1) {
+      if (condition(value, thatValue)) {
 	val newValue = (value._1, (thatValue._2, value._2))
 	newChunk :+= newValue
       }
@@ -129,7 +131,7 @@ class ChunkListNode[T, U]
 	case node =>
 	  val newNext = mod {
 	    memo(node) {
-	      node.joinHelper(thatValue, tail, memo)
+	      node.joinHelper(thatValue, tail, memo, condition)
 	    }
 	  }
 
@@ -141,7 +143,7 @@ class ChunkListNode[T, U]
 	  read(tail) { write(_) }
 	case node =>
 	  memo(node) {
-	    node.joinHelper(thatValue, tail, memo)
+	    node.joinHelper(thatValue, tail, memo, condition)
 	  }
       }
     }

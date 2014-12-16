@@ -35,6 +35,10 @@ import java.io.InputStreamReader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import tbd.reef.param.Memory;
+import tbd.reef.param.WorkerXmx;
+import tbd.reef.param.WorkerXss;
+
 /**
  * TBD REEF application launcher - main class.
  */
@@ -75,6 +79,9 @@ public final class TBDLaunch {
     cl.registerShortNameOfClass(TBDLaunch.Local.class);
     cl.registerShortNameOfClass(TBDLaunch.NumWorkers.class);
     cl.registerShortNameOfClass(TBDLaunch.Timeout.class);
+    cl.registerShortNameOfClass(Memory.class);
+    cl.registerShortNameOfClass(WorkerXmx.class);
+    cl.registerShortNameOfClass(WorkerXss.class);
     cl.processCommandLine(args);
     return confBuilder.build();
   }
@@ -91,6 +98,12 @@ public final class TBDLaunch {
             injector.getNamedInstance(TBDLaunch.NumWorkers.class)));
     cb.bindNamedParameter(TBDLaunch.Timeout.class,
         String.valueOf(injector.getNamedInstance(TBDLaunch.Timeout.class)));
+    cb.bindNamedParameter(Memory.class,
+        String.valueOf(injector.getNamedInstance(Memory.class)));
+    cb.bindNamedParameter(WorkerXmx.class,
+        String.valueOf(injector.getNamedInstance(WorkerXmx.class)));
+    cb.bindNamedParameter(WorkerXss.class,
+        String.valueOf(injector.getNamedInstance(WorkerXss.class)));
     return cb.build();
   }
 

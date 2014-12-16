@@ -31,7 +31,7 @@ class PartitionedDoubleList[T, U]
   def flatMap[V, W](f: ((T, U)) => Iterable[(V, W)])
       (implicit c: Context): PartitionedDoubleList[V, W] = ???
 
-  def join[V](that: AdjustableList[T, V])
+  def join[V](that: AdjustableList[T, V], condition: ((T, V), (T, U)) => Boolean)
       (implicit c: Context): PartitionedDoubleList[T, (U, V)] = ???
 
   def map[V, W](f: ((T, U)) => (V, W))

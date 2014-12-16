@@ -46,6 +46,8 @@ import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import tbd.reef.param.*;
+
 @Unit
 public final class TBDDriver {
   private static final Logger LOG =
@@ -56,12 +58,17 @@ public final class TBDDriver {
   private final EvaluatorRequestor requestor;
   private final JobMessageObserver jobMessageObserver;
   private final int timeout;
-  private final int numWorkers;
-  private final int numEvaluators;
+  private final int memory;
+  private final int workerXmx;
+  private final int workerXss;
+
+  private int numWorkers;
+  private int numEvaluators;
 
   private int numEvalAlloced = 0;
   private int numWorkerContexts = 0;
   private boolean masterEvalAlloced = false;
+  private boolean clusterStarted = false;
   private String masterIP = "";
   private final Integer masterPort = 2555;
   private String masterAkka = "";
@@ -100,12 +107,19 @@ public final class TBDDriver {
       final EvaluatorRequestor requestor,
       final JobMessageObserver jobMessageObserver,
       @Parameter(TBDLaunch.NumWorkers.class) final int numWorkers,
-      @Parameter(TBDLaunch.Timeout.class) final int timeout) {
+      @Parameter(TBDLaunch.Timeout.class) final int timeout,
+      @Parameter(Memory.class) final int memory,
+      @Parameter(WorkerXmx.class) final int workerXmx,
+      @Parameter(WorkerXss.class) final int workerXss
+      ) {
     this.requestor = requestor;
     this.jobMessageObserver = jobMessageObserver;
     this.numWorkers = numWorkers;
     this.timeout = timeout;
-    this.numEvaluators=numWorkers+1;
+    this.memory = memory;
+    this.workerXmx = workerXmx;
+    this.workerXss = workerXss;
+    this.numEvaluators = numWorkers + 1;
     LOG.log(Level.INFO, "Instantiated 'TBDDriver'");
   }
 
@@ -119,8 +133,7 @@ public final class TBDDriver {
 
       TBDDriver.this.requestor.submit(EvaluatorRequest.newBuilder()
           .setNumber(numEvaluators)
-          //.setMemory(3072)
-          .setMemory(6144)
+          .setMemory(memory)
           .setNumberOfCores(2)
           .build());
       LOG.log(Level.INFO, "Requested Evaluators.");
@@ -267,6 +280,35 @@ public final class TBDDriver {
       } else if (workerCtxt) {
         contexts.put(contextId, context);
         LOG.log(Level.INFO, "Context active: {0}", contextId);
+
+        if (clusterStarted == true) {
+          final String taskId = contextId.replaceFirst("context", "task");
+
+          final JavaConfigurationBuilder cb =
+              Tang.Factory.getTang().newConfigurationBuilder();
+          cb.addConfiguration(
+              TaskConfiguration.CONF
+                  .set(TaskConfiguration.IDENTIFIER, taskId)
+                  .set(TaskConfiguration.TASK, TBDWorkerTask.class)
+                  .build()
+          );
+          cb.bindNamedParameter(TBDDriver.HostIP.class,
+              ctxt2ip.get(contextId));
+          cb.bindNamedParameter(TBDDriver.HostPort.class,
+              ctxt2port.get(contextId).toString());
+          cb.bindNamedParameter(TBDDriver.MasterAkka.class, masterAkka);
+          cb.bindNamedParameter(TBDLaunch.Timeout.class, "" + timeout);
+          cb.bindNamedParameter(WorkerXmx.class, "" + workerXmx);
+          cb.bindNamedParameter(WorkerXss.class, "" + workerXss);
+
+          context.submitTask(cb.build());
+          LOG.log(Level.INFO, "Submit {0} to context {1}",
+              new Object[]{taskId, contextId});
+        }
+        String msg = "new worker: " + ctxt2ip.get(contextId) + ":"
+            + ctxt2port.get(contextId).toString();
+        sendToClient(msg);
+
       } else {
         LOG.log(Level.INFO, "Close context {0} : {1}",
             new Object[]{contextId.split("_")[1], contextId});
@@ -340,14 +382,16 @@ public final class TBDDriver {
               ctxt2port.get(contextId).toString());
           cb.bindNamedParameter(TBDDriver.MasterAkka.class, masterAkka);
           cb.bindNamedParameter(TBDLaunch.Timeout.class, "" + timeout);
+          cb.bindNamedParameter(WorkerXmx.class, "" + workerXmx);
+          cb.bindNamedParameter(WorkerXss.class, "" + workerXss);
 
           context.submitTask(cb.build());
           LOG.log(Level.INFO, "Submit {0} to context {1}",
               new Object[]{taskId, contextId});
         }
       }
-      this.jobMessageObserver.sendMessageToClient(CODEC.encode(masterAkka));
-      
+      sendToClient(masterAkka);
+      clusterStarted = true;
     } else {
       LOG.log(Level.INFO, "Sleep: wait worker contexts");
       try {
@@ -376,7 +420,7 @@ public final class TBDDriver {
     public void onNext(final byte[] message) {
       String cmd = CODEC.decode(message);
       LOG.log(Level.INFO, "client message: {0}", cmd);
-      
+
       if (cmd.equals("workers")) {
         String msg = "workers (";
         msg += contexts.size()-1;
@@ -392,6 +436,35 @@ public final class TBDDriver {
         }
         sendToClient(msg);
       }
+
+      else if (cmd.equals("add")) {
+        synchronized (TBDDriver.this) {
+          numWorkers ++;
+          numEvaluators ++;
+          TBDDriver.this.requestor.submit(EvaluatorRequest.newBuilder()
+              .setNumber(1)
+              .setMemory(3072)
+              //.setMemory(6144)
+              .setNumberOfCores(2)
+              .build());
+        }
+      }
+
+      else if (cmd.equals("remove")) {
+        String contextId = "";
+        synchronized (TBDDriver.this) {
+          contextId = String.format(
+              "context_master_%06d", numEvalAlloced-1);
+          TBDDriver.this.contexts.remove(contextId).close();
+          numWorkers --;
+          numEvaluators --;
+          numEvalAlloced --;
+          numWorkerContexts --;
+        }
+        sendToClient("removed worker: " + ctxt2ip.get(contextId) + ":"
+            + ctxt2port.get(contextId).toString());
+      }
+
     }
   }
 

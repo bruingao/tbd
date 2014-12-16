@@ -13,28 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tbd.table
+package tbd.reef.param;
 
-import tbd.{Input, Mutator}
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
-object TableInput {
-  def apply[T, U](mutator: Mutator) = new TableInput[T, U](mutator)
-}
+/**
+ * Command line parameter = stack size workers, in MB.
+ */
+@NamedParameter(
+    doc = "stack size for worker, in MB",
+    short_name = "workerXss",
+    default_value = "4")
+public final class WorkerXss implements Name<Integer> {
 
-class TableInput[T, U](mutator: Mutator) extends Input[T, U] {
-  val table = new ModTable[T, U]()
-
-  def put(key: T, value: U) {
-    table.table(key) = mutator.createMod(value)
-  }
-
-  def update(key: T, value: U) {
-    mutator.updateMod(table.table(key), value)
-  }
-
-  def remove(key: T) = ???
-
-  def getTable(): ModTable[T, U] = table
-
-  //def getMutator(): Mutator = mutator
 }

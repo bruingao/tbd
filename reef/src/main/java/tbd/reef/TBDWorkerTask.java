@@ -24,6 +24,8 @@ import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import tbd.reef.param.*;
+
 /**
  * A worker node.
  */
@@ -34,16 +36,24 @@ public final class TBDWorkerTask implements Task {
   private final String hostIP;
   private final String hostPort;
   private final String masterAkka;
+  private final String xmx;
+  private final String xss;
 
   @Inject
   TBDWorkerTask(@Parameter(TBDDriver.HostIP.class) final String ip,
       @Parameter(TBDDriver.HostPort.class) final String port,
       @Parameter(TBDDriver.MasterAkka.class) final String master,
-      @Parameter(TBDLaunch.Timeout.class) final int tout) {
+      @Parameter(TBDLaunch.Timeout.class) final int tout,
+      @Parameter(WorkerXmx.class) final int workerXmx,
+      @Parameter(WorkerXss.class) final int workerXss
+      ) {
     hostIP = ip;
     hostPort = port;
     masterAkka = master;
     timeout = tout;
+    xmx = (workerXmx == 0) ?
+        "" : "-Xmx" + Integer.toString(workerXmx/1024) + "g";
+    xss = "-Xss" + Integer.toString(workerXss) + "m";
   }
 
   @Override
@@ -65,9 +75,8 @@ public final class TBDWorkerTask implements Task {
     
     ProcessBuilder pb = new ProcessBuilder(
         "java",
-        "-Xmx2g",
-        //"-Xss4m",
-        "-Xss128m",
+        xmx,
+        xss,
         "-cp", cp,
         "tbd.worker.Main",
         "-i", hostIP,

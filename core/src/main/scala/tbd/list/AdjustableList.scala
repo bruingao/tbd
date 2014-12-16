@@ -56,7 +56,7 @@ trait AdjustableList[T, U] {
    *
    * Generally only defined where the type of that matches this.
    */
-  def join[V](that: AdjustableList[T, V])
+  def join[V](that: AdjustableList[T, V], condition: ((T, V), (T, U)) => Boolean)
       (implicit c: Context): AdjustableList[T, (U, V)]
 
   /**
@@ -78,16 +78,14 @@ trait AdjustableList[T, U] {
   /**
    * Sorts the list, using the mergesort algorithm.
    */
-  def mergesort()
-      (implicit c: Context,
-       ordering: Ordering[T]): AdjustableList[T, U] = ???
+  def mergesort(comparator: ((T, U), (T, U)) => Int)
+      (implicit c: Context): AdjustableList[T, U] = ???
 
   /**
    * Sorts the list, using the quicksort algorithm.
    */
-  def quicksort()
-      (implicit c: Context,
-       ordering: Ordering[T]): AdjustableList[T, U] = ???
+  def quicksort(comparator: ((T, U), (T, U)) => Int)
+      (implicit c: Context): AdjustableList[T, U] = ???
 
   /**
    * Reduces all elements in the list using f, in an unspecified order.
@@ -98,9 +96,8 @@ trait AdjustableList[T, U] {
   /**
    * Reduces all elements with the same key using f.
    */
-  def reduceByKey(f: (U, U) => U)
-      (implicit c: Context,
-       ordering: Ordering[T]): AdjustableList[T, U] = ???
+  def reduceByKey(f: (U, U) => U, comparator: ((T, U), (T, U)) => Int)
+      (implicit c: Context): AdjustableList[T, U] = ???
 
   /**
    * Performs a join by sorting the input lists and then merging them.

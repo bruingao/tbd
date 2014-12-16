@@ -33,7 +33,7 @@ class ChunkMergeTest(input: ListInput[Int, Int], input2: ListInput[Int, Int])
     val list2 = input2.getAdjustableList()
 
     list.asInstanceOf[ChunkList[Int, Int]]
-      .merge(list2.asInstanceOf[ChunkList[Int, Int]])
+      .merge(list2.asInstanceOf[ChunkList[Int, Int]], (pair1: (Int, Int), pair2:(Int, Int)) => pair1._1 - pair2._1)
   }
 }
 
@@ -53,7 +53,7 @@ class JoinTest(
   def run(implicit c: Context) = {
     val list = input.getAdjustableList()
     val list2 = input2.getAdjustableList()
-    list.join(list2)
+    list.join(list2, (pair1: (Int, Int), pair2:(Int, Int)) => (pair1._1 == pair2._1))
   }
 }
 
@@ -92,7 +92,7 @@ class MergeTest(input: ListInput[Int, Int], input2: ListInput[Int, Int])
     val list2 = input2.getAdjustableList()
 
     list.asInstanceOf[ModList[Int, Int]]
-      .merge(list2.asInstanceOf[ModList[Int, Int]])
+      .merge(list2.asInstanceOf[ModList[Int, Int]], ((pair1: (Int, Int), pair2:(Int, Int)) => pair1._1 - pair2._1))
   }
 }
 
@@ -100,7 +100,7 @@ class MergeSortTest(input: ListInput[Int, Int])
     extends Adjustable[AdjustableList[Int, Int]] {
   def run(implicit c: Context) = {
     val list = input.getAdjustableList()
-    list.mergesort()
+    list.mergesort((pair1: (Int, Int), pair2:(Int, Int)) => pair1._1 - pair2._1)
   }
 }
 
@@ -125,7 +125,7 @@ class ReduceByKeyTest(input: ListInput[Int, Int])
     val list = input.getAdjustableList()
     val mapped = list.flatMap(mapper)
     println("mapped")
-    mapped.reduceByKey(_ + _)
+    mapped.reduceByKey(_ + _ ,  ((pair1: (Int, Int), pair2:(Int, Int)) => pair1._1 - pair2._1))
   }
 }
 
@@ -133,7 +133,7 @@ class SortTest(input: ListInput[String, String])
     extends Adjustable[AdjustableList[String, String]] {
   def run(implicit c: Context) = {
     val list = input.getAdjustableList()
-    list.quicksort()
+    list.quicksort(((pair1: (String, String), pair2:(String, String)) => pair1._1.compareTo(pair2._1)))
   }
 }
 

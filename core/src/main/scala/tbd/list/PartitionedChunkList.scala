@@ -66,7 +66,7 @@ class PartitionedChunkList[T, U]
     new PartitionedChunkList(innerMap(0), conf)
   }
 
-  def join[V](that: AdjustableList[T, V])
+  def join[V](that: AdjustableList[T, V], condition: ((T, V), (T, U)) => Boolean)
       (implicit c: Context): PartitionedChunkList[T, (U, V)] = ???
 
   def map[V, W](f: ((T, U)) => (V, W))
@@ -88,18 +88,17 @@ class PartitionedChunkList[T, U]
     new PartitionedChunkList(innerMap(0), conf)
   }
 
-  override def mergesort()
-      (implicit c: Context,
-       ordering: Ordering[T]): PartitionedChunkList[T, U] = {
+  override def mergesort(comparator: ((T, U), (T, U)) => Int)
+      (implicit c: Context): PartitionedChunkList[T, U] = {
     def innerSort(i: Int)(implicit c: Context): ChunkList[T, U] = {
       if (i < partitions.size) {
         val (sortedPartition, sortedRest) = par {
-          c => partitions(i).mergesort()(c, ordering)
+          c => partitions(i).mergesort(comparator)(c)
         } and {
           c => innerSort(i + 1)(c)
         }
 
-	sortedPartition.merge(sortedRest)
+	sortedPartition.merge(sortedRest, comparator)
       } else {
 	new ChunkList[T, U](mod { write[ChunkListNode[T, U]](null) }, conf)
       }

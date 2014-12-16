@@ -70,7 +70,7 @@ class ListSortTest()
     extends TestAlgorithm[AdjustableList[Int, Int], Seq[Int]] {
   def run(implicit c: Context): AdjustableList[Int, Int] = {
     val modList = input.getAdjustableList()
-    modList.quicksort()
+    modList.quicksort((pair1: (Int, Int), pair2:(Int, Int)) => pair1._1 - pair2._1)
   }
 
   def getResult

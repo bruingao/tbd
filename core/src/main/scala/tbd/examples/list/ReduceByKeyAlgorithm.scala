@@ -33,7 +33,7 @@ class ReduceByKeyAdjust(list: AdjustableList[Int, Int])
 
   def run(implicit c: Context) = {
     val mapped = list.flatMap(ReduceByKeyAlgorithm.mapper)
-    mapped.reduceByKey(_ + _)
+    mapped.reduceByKey(_ + _, (pair1: (Int, Int), pair2:(Int, Int)) => pair1._1 - pair2._1)
   }
 }
 

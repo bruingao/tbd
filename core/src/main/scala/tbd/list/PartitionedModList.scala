@@ -63,12 +63,12 @@ class PartitionedModList[T, U]
     new PartitionedModList(innerFlatMap(0))
   }
 
-  def join[V](that: AdjustableList[T, V])
+  def join[V](that: AdjustableList[T, V], condition: ((T, V), (T, U)) => Boolean)
       (implicit c: Context): PartitionedModList[T, (U, V)] = {
     def innerJoin(i: Int)(implicit c: Context): Buffer[ModList[T, (U, V)]] = {
       if (i < partitions.size) {
 	val (joinedPartition, joinedRest) = par {
-	  c => partitions(i).join(that)(c)
+	  c => partitions(i).join(that, condition)(c)
 	} and {
 	  c => innerJoin(i + 1)(c)
 	}
@@ -101,18 +101,17 @@ class PartitionedModList[T, U]
     new PartitionedModList(innerMap(0))
   }
 
-  override def mergesort()
-      (implicit c: Context,
-       ordering: Ordering[T]): PartitionedModList[T, U] = {
+  override def mergesort(comparator: ((T, U), (T, U)) => Int)
+      (implicit c: Context): PartitionedModList[T, U] = {
     def innerSort(i: Int)(implicit c: Context): ModList[T, U] = {
       if (i < partitions.size) {
         val (sortedPartition, sortedRest) = par {
-          c => partitions(i).mergesort()(c, ordering)
+          c => partitions(i).mergesort(comparator)(c)
         } and {
           c => innerSort(i + 1)(c)
         }
 
-	sortedPartition.merge(sortedRest)
+	sortedPartition.merge(sortedRest, comparator)
       } else {
         new ModList[T, U](mod { write[ModListNode[T, U]](null) })
       }
@@ -122,18 +121,22 @@ class PartitionedModList[T, U]
     new PartitionedModList(Buffer(innerSort(0)))
   }
 
-  override def quicksort()
-      (implicit c: Context,
-       ordering: Ordering[T]): PartitionedModList[T, U] = {
+  override def quicksort(comparator: ((T, U), (T, U) ) => Int)
+      (implicit c: Context): PartitionedModList[T, U] = {
     def innerSort(i: Int)(implicit c: Context): ModList[T, U] = {
       if (i < partitions.size) {
         val (sortedPartition, sortedRest) = par {
-          c => partitions(i).quicksort()(c, ordering)
+          c => partitions(i).quicksort(comparator)(c)
         } and {
           c => innerSort(i + 1)(c)
         }
-
-	sortedPartition.merge(sortedRest)
+        /*
+        val comp = (pair1: (T, _), pair2: (T, _)) => {
+          comparator(pair1, pair2)
+	      //ordering.compare(pair1._1, pair2._1)
+	    }
+		*/
+	sortedPartition.merge(sortedRest, comparator)
       } else {
         new ModList[T, U](mod { write[ModListNode[T, U]](null) })
       }

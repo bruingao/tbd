@@ -51,7 +51,8 @@ class ListSortTest
 
   def run(implicit c: Context) = {
     val modList = input.getAdjustableList()
-    modList.mergesort()
+    val comparator = (pair1: (Int, Int), pair2: (Int, Int)) => {pair1._1 - pair2._1}
+    modList.mergesort(comparator)
   }
 }
 

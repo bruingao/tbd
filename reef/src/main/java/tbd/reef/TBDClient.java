@@ -32,6 +32,8 @@ import java.io.InputStreamReader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import tbd.reef.param.*;
+
 /**
  * TBD REEF application client.
  */
@@ -101,13 +103,10 @@ public class TBDClient {
    * Last result returned from the job driver.
    */
   private String lastResult;
-  
   private String masterAkka = "unknown";
-
   private final int numWorkers;
-  
   private final int timeout;
-  
+
   /**
    * TBD REEF application client.
    * Parameters are injected automatically by TANG.
@@ -117,7 +116,10 @@ public class TBDClient {
   @Inject
   TBDClient(final REEF reef,
             @Parameter(TBDLaunch.NumWorkers.class) final Integer numWorkers,
-            @Parameter(TBDLaunch.Timeout.class) final Integer timeout)
+            @Parameter(TBDLaunch.Timeout.class) final Integer timeout,
+            @Parameter(Memory.class) final Integer memory,
+            @Parameter(WorkerXmx.class) final Integer workerXmx,
+            @Parameter(WorkerXss.class) final Integer workerXss)
                 throws BindException {
 
     this.reef = reef;
@@ -160,6 +162,9 @@ public class TBDClient {
         "" + numWorkers);
     configBuilder.bindNamedParameter(TBDLaunch.Timeout.class,
         "" + timeout);
+    configBuilder.bindNamedParameter(Memory.class, "" + memory);
+    configBuilder.bindNamedParameter(WorkerXmx.class, "" + workerXmx);
+    configBuilder.bindNamedParameter(WorkerXss.class, "" + workerXss);
     this.driverConfiguration = configBuilder.build();
   }
 
@@ -195,6 +200,7 @@ public class TBDClient {
     if (cmd.equals("help")){
       printList();
     } else if (cmd.equals("exit")) {
+      //this.runningJob.send(CODEC.encode(cmd));
       this.runningJob.close();
       stopAndNotify();
     } else if (cmd.equals("master")) {
@@ -202,9 +208,11 @@ public class TBDClient {
     } else if (cmd.equals("workers")) {
       this.runningJob.send(CODEC.encode(cmd));
     } else if (cmd.equals("add")) {
-      System.out.println("Not implemented.");
+      this.runningJob.send(CODEC.encode(cmd));
+      //System.out.println("Not implemented.");
     } else if (cmd.equals("remove")) {
-      System.out.println("Not implemented.");
+      this.runningJob.send(CODEC.encode(cmd));
+      //System.out.println("Not implemented.");
     } else {
       System.out.println("Illegal command.");
     }
@@ -277,6 +285,8 @@ public class TBDClient {
         System.out.println("master Akka:  " + masterAkka);
         System.out.println("");
       } else if (msg.startsWith("workers")) {
+        System.out.println(msg);
+      } else if (msg.startsWith("new worker")) {
         System.out.println(msg);
       }
     }

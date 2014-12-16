@@ -22,7 +22,7 @@ import tbd.datastore.IntData
 import tbd.list._
 
 class ListTest(input: ListInput[Int, Int])
-    extends Adjustable[AdjustableList[Int, Int]] {
+  extends Adjustable[AdjustableList[Int, Int]] {
   def run(implicit c: Context) = {
     input.getAdjustableList()
   }
@@ -30,11 +30,10 @@ class ListTest(input: ListInput[Int, Int])
 
 class MutatorTests extends FlatSpec with Matchers {
   val intensity = 10
-  def runTest
-      (mutator: Mutator,
-       adjustable: Adjustable[AdjustableList[Int, Int]],
-       input: ListInput[Int, Int],
-       sorted: Boolean) {
+  def runTest(mutator: Mutator,
+    adjustable: Adjustable[AdjustableList[Int, Int]],
+    input: ListInput[Int, Int],
+    sorted: Boolean) {
 
     def check(output: AdjustableList[Int, Int], data: IntData): Boolean = {
       val sortedAnswer = data.table.toBuffer.sortWith(_._1 < _._1)

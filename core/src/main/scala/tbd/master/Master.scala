@@ -76,10 +76,10 @@ class Master extends Actor with ActorLogging {
 
     case ScheduleTaskMessage(parent: ActorRef, workerId: WorkerId) =>
       if (workerId == -1) {
-        (workers(nextWorker) ? ScheduleTaskMessage(parent)) pipeTo sender
+        (workers(nextWorker) ? CreateTaskMessage(parent)) pipeTo sender
         cycleWorkers()
       } else {
-        (workers(workerId) ? ScheduleTaskMessage(parent)) pipeTo sender
+        (workers(workerId) ? CreateTaskMessage(parent)) pipeTo sender
       }
 
     // Mutator
@@ -92,7 +92,7 @@ class Master extends Actor with ActorLogging {
       log.info("Starting initial run for mutator " + mutatorId)
 
       val taskRefFuture = workers(nextWorker) ?
-        ScheduleTaskMessage(workers(nextWorker))
+        CreateTaskMessage(workers(nextWorker))
       cycleWorkers()
       val taskRef = Await.result(taskRefFuture.mapTo[ActorRef], DURATION)
 
@@ -111,6 +111,11 @@ class Master extends Actor with ActorLogging {
     case ShutdownMutatorMessage(mutatorId: Int) =>
       log.info("Shutting down mutator " + mutatorId)
       (tasks(mutatorId) ? ShutdownTaskMessage) pipeTo sender
+      tasks -= mutatorId
+
+      for ((workerId, datastoreRef) <- datastoreRefs) {
+        datastoreRef ! ClearMessage()
+      }
 
     // Datastore
     case CreateModMessage(value: Any) =>

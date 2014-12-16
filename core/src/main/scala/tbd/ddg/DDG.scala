@@ -237,6 +237,29 @@ class DDG {
 
   def endTime = ordering.base.base
 
+  def getMods(): Iterable[ModId] = {
+    val mods = Buffer[ModId]()
+
+    var time = startTime.getNext()
+    while (time != endTime) {
+      val node = time.node
+
+      if (time.end != null) {
+        node match {
+          case modNode: ModNode =>
+            mods += modNode.modId1
+            if (modNode.modId2 != -1)
+              mods += modNode.modId2
+          case _ =>
+        }
+      }
+
+      time = time.getNext()
+    }
+
+    mods
+  }
+
   override def toString = toString("")
 
   def toString(prefix: String): String = {

@@ -184,11 +184,14 @@ class Task
       sender ! c.ddg
 
     case ShutdownTaskMessage =>
+      self ! akka.actor.PoisonPill
+
       val futures = Set[Future[Any]]()
       for ((actorRef, parNode) <- c.ddg.pars) {
         futures += actorRef ? ShutdownTaskMessage
-        actorRef ! akka.actor.PoisonPill
       }
+
+      datastore ? RemoveModsMessage(c.ddg.getMods())
 
       Future.sequence(futures) pipeTo sender
 

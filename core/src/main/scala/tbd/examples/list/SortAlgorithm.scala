@@ -26,7 +26,7 @@ import tbd.list._
 class QuickSortAdjust(list: AdjustableList[Int, Int])
   extends Adjustable[AdjustableList[Int, Int]] {
   def run(implicit c: Context) = {
-    list.quicksort()
+    list.quicksort ((pair1: (Int, Int), pair2:(Int, Int)) => pair1._1 - pair2._1)
   }
 }
 
@@ -70,7 +70,7 @@ class QuickSortAlgorithm(_conf: Map[String, _], _listConf: ListConf)
 class MergeSortAdjust(list: AdjustableList[Int, Int])
   extends Adjustable[AdjustableList[Int, Int]] {
   def run(implicit c: Context) = {
-    list.mergesort()
+    list.mergesort((pair1: (Int, Int), pair2:(Int, Int)) => pair1._1 - pair2._1)
   }
 }
 

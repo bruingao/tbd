@@ -38,7 +38,7 @@ class PageRankAdjust(links: AdjustableList[Int, Array[Int]])
         links.map(url => (url, rank / size))
       }
 
-      val reduced = contribs.reduceByKey(_ + _)
+      val reduced = contribs.reduceByKey(_ + _, (pair1: (Int, Double), pair2:(Int, Double)) => pair1._1 - pair2._1)
 
       ranks = reduced.mapValues(.15 + .85 * _)
     }

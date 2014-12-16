@@ -32,13 +32,14 @@ case class RemoveModsMessage(mods: Iterable[ModId])
 case class NullMessage()
 case class RegisterDatastoreMessage(workerId: WorkerId, datastoreRef: ActorRef)
 case class SetIdMessage(workerId: WorkerId)
+case class ClearMessage()
 
 // Master
 case class RegisterMutatorMessage()
 case class RunMutatorMessage(adjust: Adjustable[_], mutatorId: Int)
 case class PropagateMutatorMessage(mutatorId: Int)
 case class GetMutatorDDGMessage(mutatorId: Int)
-case class ScheduleTaskMessage(parent: ActorRef, workerId: WorkerId = -1)
+case class ScheduleTaskMessage(parent: ActorRef, workerId: WorkerId)
 case class ShutdownMutatorMessage(mutatorId: Int)
 
 case class CreateListMessage(conf: ListConf)
@@ -53,6 +54,7 @@ case class LoadMessage(listId: String, data: Map[Any, Any])
 
 // Worker
 case class RegisterWorkerMessage(worker: ActorRef, datastoreRef: ActorRef)
+case class CreateTaskMessage(parent: ActorRef)
 case class GetDatastoreMessage()
 
 // Task

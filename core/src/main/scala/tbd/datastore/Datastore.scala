@@ -283,6 +283,9 @@ class Datastore
     case SetIdMessage(_workerId: WorkerId) =>
       workerId = _workerId
 
+    case ClearMessage() =>
+      lists.clear()
+
     case x =>
       log.warning("Datastore actor received unhandled message " +
                   x + " from " + sender)
