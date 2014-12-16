@@ -94,13 +94,15 @@ This will create the assembly jar file reef/target/scala-2.11/reef-assembly-0.1-
 
 Run cluster mode with REEF on YARN:
 ```
-$HADOOP_HOME/bin/yarn jar reef/target/scala-2.11/reef-assembly-0.1-SNAPSHOT.jar tbd.reef.TBDLaunch -local false -numWorkers 2 -timeout 10
+$HADOOP_HOME/bin/yarn jar reef/target/scala-2.11/reef-assembly-0.1-SNAPSHOT.jar tbd.reef.TBDLaunch -local false -numWorkers 2 -timeout 10 -memory 8192 -workerXss 4
 ```
 
 Wait until master akka system ("akka.tcp://masterSystem0@127.0.53.53:2555/user/master" in the following example) is return to client, then submit an experiment to the cluster, and add -c parameter to check correctness of the output:
 ```
 bin/experiment.sh -a qsort --chunkSizes 1 --partitions 2 -n 10 -c --master akka.tcp://masterSystem0@127.0.53.53:2555/user/master
 ```
+
+The client is interactive: type in "master" will return master akka; type in "workers" will return workers' ip and port.
 
 
 Run cluster mode with REEF data loading on YARN:
