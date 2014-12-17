@@ -75,7 +75,7 @@ abstract class Algorithm[Input, Output]
     }
 
     val beforeLoad = System.currentTimeMillis()
-    generateNaive()
+    //generateNaive()
     naiveLoadElapsed = System.currentTimeMillis() - beforeLoad
     results("naive-load") = naiveLoadElapsed
 
@@ -85,7 +85,7 @@ abstract class Algorithm[Input, Output]
 
     val gcBefore = getGCTime()
     val before = System.currentTimeMillis()
-    runNaive()
+    //runNaive()
     results("naive") = System.currentTimeMillis() - before
     results("naive-nogc") = results("naive") - (getGCTime() - gcBefore)
 
@@ -95,6 +95,7 @@ abstract class Algorithm[Input, Output]
     results("initial-load") = initialLoad
     results("initial-nogc") = initialNoGC
 
+    /*
     if (Experiment.verbosity > 1) {
       if (mapCount != 0) {
 	println("map count = " + mapCount)
@@ -106,7 +107,9 @@ abstract class Algorithm[Input, Output]
       }
       println("starting prop")
     }
+    */
 
+    /*
     if (Experiment.file == "") {
       for (run <- runs) {
 	run match {
@@ -146,6 +149,7 @@ abstract class Algorithm[Input, Output]
       if (reduceCount != 0)
 	println("reduce count = " + reduceCount)
     }
+    */
 
     mutator.shutdown()
     connector.shutdown()
@@ -159,11 +163,11 @@ abstract class Algorithm[Input, Output]
     }
 
     val beforeLoad = System.currentTimeMillis()
-    data.load()
+    //data.load()
     val loadElapsed = naiveLoadElapsed + System.currentTimeMillis() - beforeLoad
 
     if (!Experiment.check) {
-      data.clearValues()
+      //data.clearValues()
     }
 
     if (Experiment.verbosity > 1) {
