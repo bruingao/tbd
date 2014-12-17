@@ -34,6 +34,10 @@ import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.CommandLine;
 import org.apache.hadoop.mapred.TextInputFormat;
 
+import tbd.reef.param.Memory;
+import tbd.reef.param.WorkerXmx;
+import tbd.reef.param.WorkerXss;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -96,6 +100,9 @@ public class DataLoadingReefYarn {
         .registerShortNameOfClass(DataLoadingReefYarn.Input.class)
         .registerShortNameOfClass(DataLoadingReefYarn.Partitions.class)
         .registerShortNameOfClass(DataLoadingReefYarn.ChunkSizes.class)
+        .registerShortNameOfClass(Memory.class)
+        .registerShortNameOfClass(WorkerXmx.class)
+        .registerShortNameOfClass(WorkerXss.class)
         .processCommandLine(args);
 
     final Injector injector = tang.newInjector(cb.build());
@@ -110,6 +117,12 @@ public class DataLoadingReefYarn {
         injector.getNamedInstance(DataLoadingReefYarn.Partitions.class);
     final int chunkSizes =
         injector.getNamedInstance(DataLoadingReefYarn.ChunkSizes.class);
+    final int memory =
+        injector.getNamedInstance(Memory.class);
+    final int workerXmx =
+        injector.getNamedInstance(WorkerXmx.class);
+    final int workerXss =
+        injector.getNamedInstance(WorkerXss.class);
 
     NUM_SPLITS = partitions;
 
@@ -148,7 +161,7 @@ public class DataLoadingReefYarn {
 
     final Configuration dataLoadConfiguration = 
         new DataLoadingRequestBuilder()
-          .setMemoryMB(6144)
+          .setMemoryMB(memory)
           //.setMemoryMB(3072)
           .setNumberOfCores(2)
           .setInputFormatClass(TextInputFormat.class)
@@ -174,13 +187,17 @@ public class DataLoadingReefYarn {
         DataLoadingReefYarn.MasterAkka.class, "" + akka);
     configBuilder.bindNamedParameter(
         DataLoadingReefYarn.Timeout.class, "" + jobTimeout);
+    configBuilder.bindNamedParameter(
+        WorkerXmx.class, "" + workerXmx);
+    configBuilder.bindNamedParameter(
+        WorkerXss.class, "" + workerXss);
 
     String cp = DataLoadingReefYarn.class.getProtectionDomain()
         .getCodeSource().getLocation().getFile();
     LOG.log(Level.INFO, "cp: {0}", cp);
     ProcessBuilder pb = new ProcessBuilder(
         "java",
-        "-Xss4m",
+        //"-Xss4m",
         "-cp", cp,
         "tbd.master.Main",
         "-i", masterIp,

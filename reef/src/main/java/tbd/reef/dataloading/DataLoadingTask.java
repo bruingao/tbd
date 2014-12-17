@@ -31,9 +31,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import tbd.reef.param.*;
 
 @TaskSide
 public class DataLoadingTask implements Task {
@@ -49,6 +53,8 @@ public class DataLoadingTask implements Task {
   private Integer timeout;
   private String ip;
   private String port;
+  private String xmx;
+  private String xss;
 
   @Inject
   public DataLoadingTask(final DataSet<LongWritable, Text> dataSet,
@@ -57,7 +63,10 @@ public class DataLoadingTask implements Task {
       @Parameter(DataLoadingReefYarn.MasterAkka.class) final String akka,
       @Parameter(DataLoadingReefYarn.Timeout.class) final int timeout,
       @Parameter(DataLoadingDriver.HostIP.class) final String hostIp,
-      @Parameter(DataLoadingDriver.HostPort.class) final String hostPort) {
+      @Parameter(DataLoadingDriver.HostPort.class) final String hostPort,
+      @Parameter(WorkerXmx.class) final int workerXmx,
+      @Parameter(WorkerXss.class) final int workerXss
+      ) {
     this.dataSet = dataSet;
     this.partitions = partitions;
     this.chunkSizes = chunkSizes;
@@ -65,6 +74,9 @@ public class DataLoadingTask implements Task {
     this.timeout = timeout;
     this.ip = hostIp;
     this.port = hostPort;
+    this.xmx = (workerXmx == 0) ?
+        "" : "-Xmx" + Integer.toString(workerXmx/1024) + "g";
+    this.xss = "-Xss" + Integer.toString(workerXss) + "m";
   }
 
   @Override
@@ -88,19 +100,29 @@ public class DataLoadingTask implements Task {
         .getCodeSource().getLocation().getFile();
     LOG.log(Level.INFO, "cp: {0}", cp);
 
-    ProcessBuilder pb = new ProcessBuilder(
-        "java",
-        "-Xmx2g",
-        "-Xss4m",
-        "-cp", cp,
-        "tbd.worker.Main",
-        "-i", ip,
-        "-p", port,
-        "-d", filename,
-        "-w", partitions.toString(),
-        "-u", chunkSizes.toString(),
-        masterAkka);
-    LOG.log(Level.INFO, "pb");
+    List<String> args = new ArrayList<String>();
+    args.add("java");
+    if (!xmx.equals("")){
+      args.add(xmx);
+    }
+    args.add(xss);
+    args.add("-cp");
+    args.add(cp);
+    args.add("tbd.worker.Main");
+    args.add("-i");
+    args.add(ip);
+    args.add("-p");
+    args.add(port);
+    args.add("-d");
+    args.add(filename);
+    args.add("-w");
+    args.add(partitions.toString());
+    args.add("-u");
+    args.add(chunkSizes.toString());
+    args.add(masterAkka);
+    ProcessBuilder pb = new ProcessBuilder(args);
+
+    LOG.log(Level.INFO, "process initialized");
 
     pb.redirectErrorStream(true);
     pb.inheritIO();

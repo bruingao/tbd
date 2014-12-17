@@ -37,6 +37,8 @@ import com.microsoft.tang.annotations.Unit;
 import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.wake.EventHandler;
 
+import tbd.reef.param.*;
+
 @DriverSide
 @Unit
 public class DataLoadingDriver {
@@ -52,6 +54,8 @@ public class DataLoadingDriver {
   private int timeout;
   private int chunkSizes;
   private int partitions;
+  private int workerXmx;
+  private int workerXss;
   private String akka;
   private final Integer masterPort = 2555;
 
@@ -78,12 +82,17 @@ public class DataLoadingDriver {
       @Parameter(DataLoadingReefYarn.Partitions.class) final int partitions,
       @Parameter(DataLoadingReefYarn.ChunkSizes.class) final int chunkSizes,
       @Parameter(DataLoadingReefYarn.MasterAkka.class) final String akka,
-      @Parameter(DataLoadingReefYarn.Timeout.class) final int timeout) {
+      @Parameter(DataLoadingReefYarn.Timeout.class) final int timeout,
+      @Parameter(WorkerXmx.class) final int workerXmx,
+      @Parameter(WorkerXss.class) final int workerXss
+      ) {
     this.dataLoadingService = dataLoadingService;
     this.completedDataTasks.set(dataLoadingService.getNumberOfPartitions());
     this.timeout = timeout;
     this.partitions = partitions;
     this.chunkSizes = chunkSizes;
+    this.workerXmx = workerXmx;
+    this.workerXss = workerXss;
     this.akka = akka;
     LOG.log(Level.INFO, "partitions: {0}, chunkSizes: {1}",
         new Object[] { partitions, chunkSizes });
@@ -135,6 +144,10 @@ public class DataLoadingDriver {
               DataLoadingDriver.HostIP.class, "" + ip);
           cb.bindNamedParameter(
               DataLoadingDriver.HostPort.class, "" + port);
+          cb.bindNamedParameter(
+              WorkerXmx.class, "" + workerXmx);
+          cb.bindNamedParameter(
+              WorkerXss.class, "" + workerXss);
 
           activeContext.submitTask(cb.build());
 

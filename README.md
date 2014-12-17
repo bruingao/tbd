@@ -107,7 +107,7 @@ The client is interactive: type in "master" will return master akka; type in "wo
 
 Run cluster mode with REEF data loading on YARN:
 ```
-$HADOOP_HOME/bin/yarn jar reef/target/scala-2.11/reef-assembly-0.1-SNAPSHOT.jar tbd.reef.dataloading.DataLoadingReefYarn -local false -timeout 10 -input file:///wiki.xml -partitions 2 -chunkSizes 1
+$HADOOP_HOME/bin/yarn jar reef/target/scala-2.11/reef-assembly-0.1-SNAPSHOT.jar tbd.reef.dataloading.DataLoadingReefYarn -local false -timeout 10 -input file:///wiki.xml -partitions 2 -chunkSizes 1 -memory 8192 -workerXss 4
 ```
 
-Wait until master akka system address is return to client, then submit an experiment to the cluster without generating data.
+Wait until master registers all workers, then submit an experiment to the cluster without generating data.
