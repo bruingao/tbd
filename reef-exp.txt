@@ -1,0 +1,2 @@
+bin/worker.sh -w 1 -u 1 -d /tmp/reefdata akka.tcp://masterSystem0@127.0.0.1:2552/user/master
+bin/experiment.sh -a qsort -c -p 1 -s 1 -n 20 --repeat 0 --master akka.tcp://masterSystem0@127.0.0.1:2552/user/master
